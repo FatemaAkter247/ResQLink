@@ -13,23 +13,23 @@ if ($_SESSION['role_id'] != 2) {
 
 $msg = "";
 
-// INSERT
+// INSERT RESOURCE
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     $name = $_POST['name'];
-    $category = $_POST['category'];
+    $resource_type = $_POST['resource_type']; // Updated to 'resource_type'
     $quantity = (int)$_POST['quantity'];
-    $location = $_POST['location'];
-    $contact = $_POST['contact'];
+    $unit = $_POST['unit'];
     $status = $_POST['status'];
+    $created_by = $_SESSION['user_id']; // Automatically associate with the logged-in user
 
     $stmt = $conn->prepare("
         INSERT INTO emergency_resources 
-        (resource_name, category, quantity, location, contact, status)
+        (resource_name, resource_type, quantity, unit, status, created_by)
         VALUES (?, ?, ?, ?, ?, ?)
     ");
 
-    $stmt->bind_param("ssisss", $name, $category, $quantity, $location, $contact, $status);
+    $stmt->bind_param("ssissi", $name, $resource_type, $quantity, $unit, $status, $created_by);
 
     if ($stmt->execute()) {
         $msg = "Added successfully!";
@@ -38,13 +38,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// FETCH
+// FETCH ALL RESOURCES
 $data = $conn->query("SELECT * FROM emergency_resources ORDER BY id DESC");
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Resources</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -53,16 +55,17 @@ $data = $conn->query("SELECT * FROM emergency_resources ORDER BY id DESC");
 
 <div class="container mt-5">
 
-    <h2 class="text-danger">Manage Resources</h2>
+    <h2 class="text-danger">Manage Emergency Resources</h2>
 
     <?php if ($msg): ?>
         <div class="alert alert-info"><?php echo $msg; ?></div>
     <?php endif; ?>
 
+    <!-- Form to Add Resources -->
     <form method="POST" class="mb-4">
-        <input name="name" class="form-control mb-2" placeholder="Name" required>
+        <input name="name" class="form-control mb-2" placeholder="Resource Name" required>
 
-        <select name="category" class="form-control mb-2">
+        <select name="resource_type" class="form-control mb-2">
             <option>Food</option>
             <option>Water</option>
             <option>Medical</option>
@@ -71,13 +74,12 @@ $data = $conn->query("SELECT * FROM emergency_resources ORDER BY id DESC");
         </select>
 
         <input name="quantity" type="number" class="form-control mb-2" placeholder="Quantity" required>
-        <input name="location" class="form-control mb-2" placeholder="Location" required>
-        <input name="contact" class="form-control mb-2" placeholder="Contact">
+        <input name="unit" class="form-control mb-2" placeholder="Unit (e.g., liters, bags)" required>
 
         <select name="status" class="form-control mb-2">
-            <option>available</option>
-            <option>limited</option>
-            <option>unavailable</option>
+            <option>Available</option>
+            <option>Limited</option>
+            <option>Unavailable</option>
         </select>
 
         <button class="btn btn-danger">Add Resource</button>
@@ -87,9 +89,8 @@ $data = $conn->query("SELECT * FROM emergency_resources ORDER BY id DESC");
 
     <?php while ($r = $data->fetch_assoc()): ?>
         <div class="card p-2 mb-2">
-            <b><?php echo $r['resource_name']; ?></b>
-            <br>Category: <?php echo $r['category']; ?>
-            <br>Qty: <?php echo $r['quantity']; ?>
+            <b><?php echo $r['resource_name']; ?></b> (<?php echo $r['resource_type']; ?>)
+            <br>Qty: <?php echo $r['quantity']; ?> <?php echo $r['unit']; ?>
             <br>Status: <?php echo $r['status']; ?>
         </div>
     <?php endwhile; ?>
