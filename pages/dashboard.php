@@ -96,27 +96,18 @@ elseif ($role_id == 5) $role_name = "System Admin";
 <div class="row">
 
     <!-- LEFT SIDE -->
-    <div class="col-md-8">
-
-        <?php if ($role_id != 2): ?>
-        <div class="info-box mb-3">
-            <h5>Unread Alerts</h5>
-            <h3><?php echo $count; ?></h3>
-        </div>
-        <?php endif; ?>
-
-        <div class="info-box">
-            <h5>System Info</h5>
-            <p>
-                <?php if ($role_id == 2): ?>
-                    You can manage alerts and shelters.
-                <?php else: ?>
-                    Stay updated with alerts and find shelters.
-                <?php endif; ?>
-            </p>
-        </div>
-
+<div class="col-md-8">
+    <div class="info-box">
+        <h5>System Info</h5>
+        <p class="mb-0">
+            <?php if ($role_id == 2): ?>
+                You can manage disaster alerts, shelters, resources, and evacuation tracking.
+            <?php else: ?>
+                Stay updated with alerts, find nearby shelters, and update your evacuation status.
+            <?php endif; ?>
+        </p>
     </div>
+</div>
 
     <!-- RIGHT SIDE -->
     <div class="col-md-4">
@@ -131,6 +122,10 @@ elseif ($role_id == 5) $role_name = "System Admin";
 
             <a href="admin/manage_shelters.php" class="btn btn-primary">Manage Shelters</a>
 
+            <a href="admin/manage_resources.php" class="btn btn-info text-white">Manage Resources</a>
+
+            <a href="admin/manage_evacuation.php" class="btn btn-secondary">Manage Evacuation</a>
+
         </div>
 
         <?php else: ?>
@@ -140,6 +135,10 @@ elseif ($role_id == 5) $role_name = "System Admin";
             <a href="alerts.php" class="btn btn-warning">View Alert</a>
 
             <a href="shelters.php" class="btn btn-info">View Shelters</a>
+
+            <a href="resources.php" class="btn btn-primary">Resources</a>
+
+            <a href="evacuation_status.php" class="btn btn-success">Update Evacuation</a>
 
         </div>
         <?php endif; ?>
