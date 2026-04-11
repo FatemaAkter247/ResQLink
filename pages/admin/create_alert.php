@@ -14,30 +14,45 @@ if ((int)$_SESSION['role_id'] !== 2) {
 $success = "";
 $error = "";
 
+function getDefaultImage($type){
+    $type = strtolower(trim($type));
+
+    if (strpos($type, 'fire') !== false) return "fire.jpg";
+    if (strpos($type, 'flood') !== false) return "flood.jpg";
+    if (strpos($type, 'earthquake') !== false) return "earthquake.jpg";
+    if (strpos($type, 'cyclone') !== false) return "cyclone.jpg";
+    if (strpos($type, 'storm') !== false) return "cyclone.jpg";
+
+    return "default.jpg";
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $type = trim($_POST['alert_type'] ?? '');
     $location = trim($_POST['location_text'] ?? '');
-    $severity = trim($_POST['severity'] ?? 'medium');
+    $severity = trim($_POST['severity'] ?? '');
     $instructions = trim($_POST['instructions'] ?? '');
-    $created_by = (int) $_SESSION['user_id'];
+    $created_by = (int)$_SESSION['user_id'];
 
     if ($type === '' || $location === '' || $instructions === '') {
         $error = "Please fill in all fields.";
     } else {
+        $image_name = getDefaultImage($type);
+
         $stmt = $conn->prepare("
-            INSERT INTO disaster_alerts
-            (created_by, alert_type, location_text, severity, instructions, status, published_at)
-            VALUES (?, ?, ?, ?, ?, 'published', NOW())
+            INSERT INTO disaster_alerts 
+            (created_by, alert_type, location_text, severity, instructions, image, status, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'published', NOW())
         ");
 
-        $stmt->bind_param("issss", $created_by, $type, $location, $severity, $instructions);
+        $stmt->bind_param("isssss", $created_by, $type, $location, $severity, $instructions, $image_name);
 
         if ($stmt->execute()) {
             $alert_id = $stmt->insert_id;
 
             $users = $conn->query("SELECT id FROM users");
             while ($u = $users->fetch_assoc()) {
-                $uid = (int) $u['id'];
+                $uid = (int)$u['id'];
 
                 $n = $conn->prepare("
                     INSERT INTO alert_notifications (alert_id, user_id)
@@ -48,121 +63,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $n->close();
             }
 
-            $success = "Alert published successfully!";
+            $success = "Alert created successfully!";
         } else {
-            $error = "Failed to publish alert.";
+            $error = "Database error!";
         }
 
         $stmt->close();
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Create Alert - ResQLink</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../../css/style.css">
+    <title>Create Alert</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <style>
-        body {
-            background: linear-gradient(135deg, #dc3545 0%, #bb2d3b 100%);
-            min-height: 100vh;
-        }
-
-        .page-card {
-            width: 100%;
-            max-width: 700px;
-            margin: 60px auto;
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
-            padding: 2rem;
-        }
-
-        .page-card h2 {
-            color: #dc3545;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-            text-align: center;
-        }
-
-        .form-control:focus,
-        .form-select:focus,
-        textarea:focus {
-            border-color: #dc3545;
-            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
-        }
-
-        .btn-publish {
-            background-color: #dc3545;
-            border-color: #dc3545;
-            font-weight: 600;
-        }
-
-        .btn-publish:hover {
-            background-color: #bb2d3b;
-            border-color: #bb2d3b;
-        }
-    </style>
 </head>
 
-<body>
+<body style="background:#dc3545;">
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="../../index.php">
-            <span class="badge bg-danger">ResQLink</span>
-        </a>
-    </div>
-</nav>
+<div class="container mt-5 bg-white p-4 rounded">
 
-<div class="container">
-    <div class="page-card">
-        <h2>Create Disaster Alert</h2>
+    <h2 class="text-danger">Create Disaster Alert</h2>
 
-        <?php if ($success): ?>
-            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
-        <?php endif; ?>
+    <?php if ($success): ?>
+        <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+    <?php endif; ?>
 
-        <?php if ($error): ?>
-            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
-        <?php endif; ?>
+    <?php if ($error): ?>
+        <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+    <?php endif; ?>
 
-        <form method="POST">
-            <div class="mb-3">
-                <label class="form-label">Alert Type</label>
-                <input type="text" name="alert_type" class="form-control" placeholder="Flood, Fire, Cyclone..." required>
-            </div>
+    <form method="POST">
 
-            <div class="mb-3">
-                <label class="form-label">Location</label>
-                <input type="text" name="location_text" class="form-control" placeholder="Enter affected location" required>
-            </div>
+        <label class="form-label">Alert Type</label>
+        <select name="alert_type" class="form-control mb-2" required>
+            <option value="">Select Alert Type</option>
+            <option value="fire">Fire</option>
+            <option value="flood">Flood</option>
+            <option value="earthquake">Earthquake</option>
+            <option value="cyclone">Cyclone</option>
+            <option value="storm">Storm</option>
+            <option value="other">Other</option>
+        </select>
 
-            <div class="mb-3">
-                <label class="form-label">Severity</label>
-                <select name="severity" class="form-select" required>
-                    <option value="low">Low</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                </select>
-            </div>
+        <label class="form-label">Location</label>
+        <input name="location_text" class="form-control mb-2" placeholder="Location" required>
 
-            <div class="mb-3">
-                <label class="form-label">Instructions</label>
-                <textarea name="instructions" class="form-control" rows="5" placeholder="Write alert instructions..." required></textarea>
-            </div>
+        <label class="form-label">Severity</label>
+        <select name="severity" class="form-control mb-2">
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="critical">critical</option>
+        </select>
 
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-publish btn-danger">Publish Alert</button>
-                <a href="../dashboard.php" class="btn btn-secondary">Back</a>
-            </div>
-        </form>
-    </div>
+        <label class="form-label">Instructions</label>
+        <textarea name="instructions" class="form-control mb-2" placeholder="Instructions" required></textarea>
+
+        <button class="btn btn-danger">Create Alert</button>
+
+    </form>
+
+    <a href="../dashboard.php" class="btn btn-secondary mt-3">Back</a>
+
 </div>
 
 </body>

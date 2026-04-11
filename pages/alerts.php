@@ -18,22 +18,36 @@ if (isset($_GET['read'])) {
 
 $sql = "
 SELECT an.id AS notif_id, an.is_read,
-       da.alert_type, da.location_text, da.severity, da.instructions, da.created_at
+       da.alert_type, da.location_text, da.severity, da.instructions, da.image, da.published_at
 FROM alert_notifications an
 JOIN disaster_alerts da ON an.alert_id = da.id
 WHERE an.user_id = $user_id
-AND da.status = 'published'
-ORDER BY da.created_at DESC
+ORDER BY da.published_at DESC
 ";
 
 $result = $conn->query($sql);
-?>
 
+function getDisasterIcon($type) {
+    $type = strtolower(trim($type));
+
+    if (strpos($type, 'fire') !== false) return "🔥";
+    if (strpos($type, 'flood') !== false) return "🌊";
+    if (strpos($type, 'earthquake') !== false) return "🌍";
+    if (strpos($type, 'cyclone') !== false) return "🌀";
+    if (strpos($type, 'storm') !== false) return "🌪️";
+    if (strpos($type, 'landslide') !== false) return "⛰️";
+    if (strpos($type, 'accident') !== false) return "🚨";
+
+    return "⚠️";
+}
+?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Alerts - ResQLink</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alerts - ResQLink</title>
+
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -44,7 +58,7 @@ $result = $conn->query($sql);
         }
 
         .container-box {
-            max-width: 900px;
+            max-width: 950px;
             margin: 60px auto;
             background: #fff;
             padding: 30px;
@@ -53,15 +67,41 @@ $result = $conn->query($sql);
         }
 
         .alert-card {
-            border-left: 5px solid #dc3545;
-            padding: 15px;
-            margin-bottom: 15px;
-            background: #f9f9f9;
-            border-radius: 8px;
+            border-left: 5px solid #fff;
+            padding: 20px;
+            margin-bottom: 18px;
+            border-radius: 10px;
+            min-height: 230px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            color: #fff;
+        }
+
+        .alert-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .icon {
+            font-size: 28px;
+            margin-right: 8px;
+        }
+
+        .severity-badge {
+            text-transform: uppercase;
+        }
+
+        .text-soft {
+            color: rgba(255,255,255,0.9);
         }
     </style>
 </head>
-
 <body>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
@@ -78,29 +118,50 @@ $result = $conn->query($sql);
 
     <?php if ($result && $result->num_rows > 0): ?>
         <?php while ($row = $result->fetch_assoc()): ?>
-            <div class="alert-card">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                    <b><?php echo htmlspecialchars($row['alert_type']); ?></b>
-                    <span class="badge bg-danger"><?php echo htmlspecialchars($row['severity']); ?></span>
+            <?php
+                $imageFile = !empty($row['image']) ? $row['image'] : 'default.jpg';
+                $relativeImage = "../uploads/default_alerts/" . rawurlencode($imageFile);
+            ?>
+
+            <div class="alert-card"
+                 style="background-image:
+                    linear-gradient(rgba(0,0,0,0.60), rgba(0,0,0,0.60)),
+                    url('<?php echo $relativeImage; ?>');">
+
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <h4 class="alert-title">
+                            <span class="icon"><?php echo getDisasterIcon($row['alert_type']); ?></span>
+                            <?php echo htmlspecialchars(ucfirst($row['alert_type'])); ?>
+                        </h4>
+                        <small class="text-soft">
+                            Published: <?php echo htmlspecialchars($row['published_at']); ?>
+                        </small>
+                    </div>
+
+                    <span class="badge bg-warning text-dark severity-badge">
+                        <?php echo htmlspecialchars($row['severity']); ?>
+                    </span>
                 </div>
 
-                <p><b>Location:</b> <?php echo htmlspecialchars($row['location_text']); ?></p>
-                <p><?php echo nl2br(htmlspecialchars($row['instructions'])); ?></p>
-
-                <small><?php echo htmlspecialchars($row['created_at']); ?></small><br>
+                <p class="mt-3 mb-1"><strong>Location:</strong> <?php echo htmlspecialchars($row['location_text']); ?></p>
+                <p class="mb-2"><?php echo nl2br(htmlspecialchars($row['instructions'])); ?></p>
 
                 <?php if (!$row['is_read']): ?>
-                    <a href="?read=<?php echo $row['notif_id']; ?>" class="btn btn-success btn-sm mt-2">
-                        Mark as Read
-                    </a>
+                    <div class="mt-2">
+                        <a href="?read=<?php echo $row['notif_id']; ?>" class="btn btn-light btn-sm">
+                            Mark Read
+                        </a>
+                    </div>
                 <?php endif; ?>
+
             </div>
         <?php endwhile; ?>
     <?php else: ?>
         <div class="alert alert-info">No published alerts found.</div>
     <?php endif; ?>
 
-    <a href="dashboard.php" class="btn btn-secondary mt-3">Back</a>
+    <a href="dashboard.php" class="btn btn-secondary">Back</a>
 
 </div>
 
