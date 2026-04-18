@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $users = $conn->query("SELECT id FROM users");
             while ($u = $users->fetch_assoc()) {
-                $uid = (int) $u['id'];
+                $uid = (int)$u['id'];
 
                 $n = $conn->prepare("
                     INSERT INTO alert_notifications (alert_id, user_id)
@@ -59,10 +59,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Create Alert - ResQLink</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Alert - ResQLink</title>
+
     <link rel="stylesheet" href="../../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -74,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .page-card {
             width: 100%;
-            max-width: 700px;
+            max-width: 750px;
             margin: 60px auto;
             background: #fff;
             border-radius: 14px;
@@ -106,9 +108,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #bb2d3b;
             border-color: #bb2d3b;
         }
+
+        .small-note {
+            font-size: 0.92rem;
+            color: #6c757d;
+        }
     </style>
 </head>
-
 <body>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
@@ -134,7 +140,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <form method="POST">
             <div class="mb-3">
                 <label class="form-label">Alert Type</label>
-                <input type="text" name="alert_type" class="form-control" placeholder="Flood, Fire, Cyclone..." required>
+                <select name="alert_type" class="form-select" required>
+                    <option value="">Select alert type</option>
+                    <option value="Cyclone">Cyclone</option>
+                    <option value="Flood">Flood</option>
+                    <option value="Fire">Fire</option>
+                    <option value="Earthquake">Earthquake</option>
+                    <option value="Other">Other</option>
+                </select>
+                <div class="small-note mt-1">
+                    These types match the background images in the View Alert page.
+                </div>
             </div>
 
             <div class="mb-3">
@@ -157,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <textarea name="instructions" class="form-control" rows="5" placeholder="Write alert instructions..." required></textarea>
             </div>
 
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
                 <button type="submit" class="btn btn-publish btn-danger">Publish Alert</button>
                 <a href="../dashboard.php" class="btn btn-secondary">Back</a>
             </div>
