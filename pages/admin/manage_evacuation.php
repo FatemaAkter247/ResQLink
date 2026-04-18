@@ -11,13 +11,129 @@ if ((int)$_SESSION['role_id'] !== 2) {
     die("Access denied");
 }
 
-$statusFilter = trim($_GET['status'] ?? '');
+$success = "";
+$error = "";
+$editMode = false;
 
-$sql = "
-    SELECT
+$editData = [
+    'id' => '',
+    'user_id' => '',
+    'status' => 'safe',
+    'shelter_id' => '',
+    'notes' => ''
+];
+
+/* ---------------- DELETE ---------------- */
+if (isset($_GET['delete'])) {
+    $delete_id = (int)$_GET['delete'];
+
+    $stmt = $conn->prepare("DELETE FROM evacuation_status WHERE id = ?");
+    $stmt->bind_param("i", $delete_id);
+
+    if ($stmt->execute()) {
+        header("Location: manage_evacuation.php?msg=deleted");
+        exit;
+    } else {
+        $error = "Failed to delete evacuation record.";
+    }
+    $stmt->close();
+}
+
+/* ---------------- EDIT LOAD ---------------- */
+if (isset($_GET['edit'])) {
+    $edit_id = (int)$_GET['edit'];
+
+    $stmt = $conn->prepare("SELECT * FROM evacuation_status WHERE id = ?");
+    $stmt->bind_param("i", $edit_id);
+    $stmt->execute();
+    $resultEdit = $stmt->get_result();
+
+    if ($resultEdit && $resultEdit->num_rows === 1) {
+        $editData = $resultEdit->fetch_assoc();
+        $editMode = true;
+    } else {
+        $error = "Evacuation record not found.";
+    }
+    $stmt->close();
+}
+
+/* ---------------- ADD / UPDATE ---------------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = (int)($_POST['id'] ?? 0);
+    $user_id = (int)($_POST['user_id'] ?? 0);
+    $status = trim($_POST['status'] ?? 'safe');
+    $shelter_id = trim($_POST['shelter_id'] ?? '');
+    $notes = trim($_POST['notes'] ?? '');
+
+    if ($user_id <= 0 || $status === '') {
+        $error = "Please fill all required fields.";
+    } else {
+        $allowedStatuses = ['safe', 'evacuated', 'need_help'];
+        if (!in_array($status, $allowedStatuses, true)) {
+            $status = 'safe';
+        }
+
+        $shelter_id = ($shelter_id === '') ? null : (int)$shelter_id;
+
+        if ($status !== 'evacuated') {
+            $shelter_id = null;
+        }
+
+        if ($id > 0) {
+            $stmt = $conn->prepare("
+                UPDATE evacuation_status
+                SET user_id = ?, status = ?, shelter_id = ?, notes = ?, updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->bind_param("isisi", $user_id, $status, $shelter_id, $notes, $id);
+
+            if ($stmt->execute()) {
+                header("Location: manage_evacuation.php?msg=updated");
+                exit;
+            } else {
+                $error = "Failed to update evacuation record.";
+            }
+            $stmt->close();
+        } else {
+            $stmt = $conn->prepare("
+                INSERT INTO evacuation_status (user_id, status, shelter_id, notes, updated_at)
+                VALUES (?, ?, ?, ?, NOW())
+            ");
+            $stmt->bind_param("isis", $user_id, $status, $shelter_id, $notes);
+
+            if ($stmt->execute()) {
+                header("Location: manage_evacuation.php?msg=added");
+                exit;
+            } else {
+                $error = "Failed to add evacuation record.";
+            }
+            $stmt->close();
+        }
+    }
+}
+
+/* ---------------- SUCCESS MESSAGE ---------------- */
+if (isset($_GET['msg'])) {
+    if ($_GET['msg'] === 'added') {
+        $success = "Evacuation record added successfully!";
+    } elseif ($_GET['msg'] === 'updated') {
+        $success = "Evacuation record updated successfully!";
+    } elseif ($_GET['msg'] === 'deleted') {
+        $success = "Evacuation record deleted successfully!";
+    }
+}
+
+/* ---------------- DATA FOR DROPDOWNS ---------------- */
+$users = $conn->query("SELECT id, full_name, phone FROM users ORDER BY full_name ASC");
+$shelters = $conn->query("SELECT id, shelter_name, city FROM shelters ORDER BY shelter_name ASC");
+
+/* ---------------- LIST ALL RECORDS ---------------- */
+$result = $conn->query("
+    SELECT 
         es.id,
         es.user_id,
         es.status,
+        es.shelter_id,
         es.notes,
         es.updated_at,
         u.full_name,
@@ -27,58 +143,10 @@ $sql = "
         s.address,
         s.city
     FROM evacuation_status es
-    INNER JOIN (
-        SELECT user_id, MAX(id) AS latest_id
-        FROM evacuation_status
-        GROUP BY user_id
-    ) latest ON es.id = latest.latest_id
-    INNER JOIN users u ON es.user_id = u.id
+    LEFT JOIN users u ON es.user_id = u.id
     LEFT JOIN shelters s ON es.shelter_id = s.id
-";
-
-$params = [];
-$types = "";
-
-if ($statusFilter !== '' && in_array($statusFilter, ['safe', 'evacuated', 'need_help'], true)) {
-    $sql .= " WHERE es.status = ? ";
-    $params[] = $statusFilter;
-    $types .= "s";
-}
-
-$sql .= " ORDER BY es.updated_at DESC, es.id DESC ";
-
-$stmt = $conn->prepare($sql);
-if (!empty($params)) {
-    $stmt->bind_param($types, ...$params);
-}
-$stmt->execute();
-$result = $stmt->get_result();
-
-$summary = [
-    'safe' => 0,
-    'evacuated' => 0,
-    'need_help' => 0
-];
-
-$summaryRes = $conn->query("
-    SELECT status, COUNT(*) AS total
-    FROM (
-        SELECT es.*
-        FROM evacuation_status es
-        INNER JOIN (
-            SELECT user_id, MAX(id) AS latest_id
-            FROM evacuation_status
-            GROUP BY user_id
-        ) latest ON es.id = latest.latest_id
-    ) latest_status
-    GROUP BY status
+    ORDER BY es.id DESC
 ");
-
-if ($summaryRes) {
-    while ($row = $summaryRes->fetch_assoc()) {
-        $summary[$row['status']] = (int)$row['total'];
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -110,18 +178,14 @@ if ($summaryRes) {
         .page-title {
             color: #dc3545;
             font-weight: 700;
+            margin-bottom: 1.5rem;
         }
 
-        .summary-box {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 18px;
-            text-align: center;
-        }
-
-        .summary-box h3 {
-            color: #dc3545;
-            margin-bottom: 0;
+        .form-control:focus,
+        .form-select:focus,
+        textarea:focus {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
         }
 
         .record-box {
@@ -130,6 +194,18 @@ if ($summaryRes) {
             border-radius: 10px;
             padding: 16px;
             margin-bottom: 14px;
+        }
+
+        .btn-red {
+            background-color: #dc3545;
+            border-color: #dc3545;
+            color: #fff;
+        }
+
+        .btn-red:hover {
+            background-color: #bb2d3b;
+            border-color: #bb2d3b;
+            color: #fff;
         }
     </style>
 </head>
@@ -145,71 +221,122 @@ if ($summaryRes) {
 
 <div class="container">
     <div class="page-card">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-            <div>
-                <h2 class="page-title mb-1">Evacuation Monitoring</h2>
-                <p class="text-muted mb-0">Monitor the latest evacuation status of all users.</p>
-            </div>
-            <a href="../dashboard.php" class="btn btn-secondary">Back</a>
-        </div>
+        <h2 class="page-title"><?php echo $editMode ? 'Update Evacuation Record' : 'Manage Evacuation'; ?></h2>
 
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="summary-box">
-                    <p class="mb-1">Safe</p>
-                    <h3><?php echo $summary['safe']; ?></h3>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="summary-box">
-                    <p class="mb-1">Evacuated</p>
-                    <h3><?php echo $summary['evacuated']; ?></h3>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="summary-box">
-                    <p class="mb-1">Need Help</p>
-                    <h3><?php echo $summary['need_help']; ?></h3>
-                </div>
-            </div>
-        </div>
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
 
-        <form method="GET" class="row g-2 mb-4">
-            <div class="col-md-4">
-                <select name="status" class="form-select">
-                    <option value="">All Statuses</option>
-                    <option value="safe" <?php echo $statusFilter === 'safe' ? 'selected' : ''; ?>>Safe</option>
-                    <option value="evacuated" <?php echo $statusFilter === 'evacuated' ? 'selected' : ''; ?>>Evacuated</option>
-                    <option value="need_help" <?php echo $statusFilter === 'need_help' ? 'selected' : ''; ?>>Need Help</option>
+        <?php if ($error): ?>
+            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="id" value="<?php echo htmlspecialchars($editData['id']); ?>">
+
+            <div class="mb-3">
+                <label class="form-label">User</label>
+                <select name="user_id" class="form-select" required>
+                    <option value="">Select user</option>
+                    <?php
+                    if ($users) {
+                        while ($u = $users->fetch_assoc()):
+                    ?>
+                        <option value="<?php echo (int)$u['id']; ?>"
+                            <?php echo ((string)$editData['user_id'] === (string)$u['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($u['full_name'] . ' (' . $u['phone'] . ')'); ?>
+                        </option>
+                    <?php
+                        endwhile;
+                    }
+                    ?>
                 </select>
             </div>
-            <div class="col-md-auto">
-                <button class="btn btn-danger">Filter</button>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" required>
+                        <option value="safe" <?php echo $editData['status'] === 'safe' ? 'selected' : ''; ?>>Safe</option>
+                        <option value="evacuated" <?php echo $editData['status'] === 'evacuated' ? 'selected' : ''; ?>>Evacuated</option>
+                        <option value="need_help" <?php echo $editData['status'] === 'need_help' ? 'selected' : ''; ?>>Need Help</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Shelter (only if evacuated)</label>
+                    <select name="shelter_id" class="form-select">
+                        <option value="">No shelter selected</option>
+                        <?php
+                        if ($shelters) {
+                            while ($s = $shelters->fetch_assoc()):
+                        ?>
+                            <option value="<?php echo (int)$s['id']; ?>"
+                                <?php echo ((string)$editData['shelter_id'] === (string)$s['id']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($s['shelter_name'] . ' - ' . $s['city']); ?>
+                            </option>
+                        <?php
+                            endwhile;
+                        }
+                        ?>
+                    </select>
+                </div>
             </div>
-            <div class="col-md-auto">
-                <a href="manage_evacuation.php" class="btn btn-outline-secondary">Reset</a>
+
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <textarea name="notes" class="form-control" rows="4" placeholder="Write notes if needed..."><?php echo htmlspecialchars($editData['notes']); ?></textarea>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="submit" class="btn btn-red">
+                    <?php echo $editMode ? 'Update Record' : 'Add Record'; ?>
+                </button>
+
+                <?php if ($editMode): ?>
+                    <a href="manage_evacuation.php" class="btn btn-secondary">Cancel</a>
+                <?php else: ?>
+                    <a href="../dashboard.php" class="btn btn-secondary">Back</a>
+                <?php endif; ?>
             </div>
         </form>
+
+        <hr>
+
+        <h4 class="mb-3">All Evacuation Records</h4>
 
         <?php if ($result && $result->num_rows > 0): ?>
             <?php while ($row = $result->fetch_assoc()): ?>
                 <div class="record-box">
-                    <h5 class="text-danger"><?php echo htmlspecialchars($row['full_name']); ?></h5>
-                    <p class="mb-1"><strong>Status:</strong> <?php echo htmlspecialchars($row['status']); ?></p>
-                    <p class="mb-1"><strong>Phone:</strong> <?php echo htmlspecialchars($row['phone']); ?></p>
-                    <p class="mb-1"><strong>Email:</strong> <?php echo htmlspecialchars($row['email'] ?? 'N/A'); ?></p>
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <h5 class="text-danger mb-1"><?php echo htmlspecialchars($row['full_name'] ?? 'Unknown User'); ?></h5>
+                            <p class="mb-1"><strong>Status:</strong> <?php echo htmlspecialchars($row['status']); ?></p>
+                            <p class="mb-1"><strong>Phone:</strong> <?php echo htmlspecialchars($row['phone'] ?? 'N/A'); ?></p>
+                            <p class="mb-1"><strong>Email:</strong> <?php echo htmlspecialchars($row['email'] ?? 'N/A'); ?></p>
 
-                    <?php if (!empty($row['shelter_name'])): ?>
-                        <p class="mb-1"><strong>Shelter:</strong> <?php echo htmlspecialchars($row['shelter_name']); ?></p>
-                        <p class="mb-1"><strong>Address:</strong> <?php echo htmlspecialchars($row['address']); ?></p>
-                        <p class="mb-1"><strong>City:</strong> <?php echo htmlspecialchars($row['city'] ?? 'N/A'); ?></p>
-                    <?php endif; ?>
+                            <?php if (!empty($row['shelter_name'])): ?>
+                                <p class="mb-1"><strong>Shelter:</strong> <?php echo htmlspecialchars($row['shelter_name']); ?></p>
+                                <p class="mb-1"><strong>Address:</strong> <?php echo htmlspecialchars($row['address']); ?></p>
+                                <p class="mb-1"><strong>City:</strong> <?php echo htmlspecialchars($row['city']); ?></p>
+                            <?php endif; ?>
 
-                    <?php if (!empty($row['notes'])): ?>
-                        <p class="mb-1"><strong>Notes:</strong> <?php echo htmlspecialchars($row['notes']); ?></p>
-                    <?php endif; ?>
+                            <?php if (!empty($row['notes'])): ?>
+                                <p class="mb-1"><strong>Notes:</strong> <?php echo htmlspecialchars($row['notes']); ?></p>
+                            <?php endif; ?>
 
-                    <p class="mb-0"><strong>Last Updated:</strong> <?php echo htmlspecialchars($row['updated_at']); ?></p>
+                            <p class="mb-0"><strong>Updated At:</strong> <?php echo htmlspecialchars($row['updated_at']); ?></p>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <a href="manage_evacuation.php?edit=<?php echo (int)$row['id']; ?>" class="btn btn-warning btn-sm">Edit</a>
+                            <a href="manage_evacuation.php?delete=<?php echo (int)$row['id']; ?>"
+                               class="btn btn-danger btn-sm"
+                               onclick="return confirm('Are you sure you want to delete this evacuation record?');">
+                               Delete
+                            </a>
+                        </div>
+                    </div>
                 </div>
             <?php endwhile; ?>
         <?php else: ?>
