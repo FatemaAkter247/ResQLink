@@ -59,7 +59,7 @@ $result = $conn->query("SELECT * FROM shelters ORDER BY created_at DESC");
     </div>
 </nav>
 
-<div class="container-box">
+<<div class="container-box">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <h2 class="text-danger mb-0">Available Shelters</h2>
 

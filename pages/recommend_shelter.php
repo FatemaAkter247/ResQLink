@@ -182,7 +182,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     <form method="POST">
         <label>Your City</label>
-        <input type="text" name="city" placeholder="Example: savar" required>
+        <input type="text" name="city" placeholder="Example: Dhaka" required>
 
         <label>Number of People</label>
         <input type="number" name="people_count" min="1" required>

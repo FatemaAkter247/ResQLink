@@ -1517,7 +1517,7 @@ a {
                     </div>
                     <span>View Alerts</span>
                 </a>
-                <a href="recommend_shelter.php" class="action-card">
+         <a href="recommend_shelter.php" class="action-card">
     <div class="ac-icon" style="background:#6a1b9a;">
         <i class="fa-solid fa-wand-magic-sparkles"></i>
     </div>
