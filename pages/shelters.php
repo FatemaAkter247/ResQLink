@@ -59,8 +59,15 @@ $result = $conn->query("SELECT * FROM shelters ORDER BY created_at DESC");
     </div>
 </nav>
 
-<div class="container-box">
-    <h2 class="text-danger mb-4">Available Shelters</h2>
+<<div class="container-box">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <h2 class="text-danger mb-0">Available Shelters</h2>
+
+    <a href="recommend_shelter.php" class="btn btn-danger">
+        Smart Shelter Recommendation
+    </a>
+</div>
+    
 
     <?php if ($result && $result->num_rows > 0): ?>
         <?php while ($row = $result->fetch_assoc()): ?>
