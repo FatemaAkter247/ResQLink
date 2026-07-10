@@ -930,6 +930,10 @@ a {
                 <i class="fa-solid fa-person-walking-arrow-right"></i> Manage Evacuation
             </a>
 
+            <a href="admin/rescue_team.php" class="nav-link">
+                <i class="fa-solid fa-person-rifle"></i> Rescue Team
+            </a>
+
         <?php elseif ($role === 'rescue_team'): ?>
             <span class="nav-label">Operations</span>
 
@@ -940,14 +944,14 @@ a {
                 <?php endif; ?>
             </a>
 
-            <a href="#" class="nav-link">
+            <a href="rescue_team.php" class="nav-link">
                 <i class="fa-solid fa-person-rifle"></i> My Missions
                 <?php if (($stats['my_missions'] ?? 0) > 0): ?>
                     <span class="badge"><?= (int)$stats['my_missions'] ?></span>
                 <?php endif; ?>
             </a>
 
-            <a href="#" class="nav-link">
+            <a href="rescue_team.php?view=requests" class="nav-link">
                 <i class="fa-solid fa-triangle-exclamation"></i> Emergency Requests
                 <?php if (($stats['pending_requests'] ?? 0) > 0): ?>
                     <span class="badge"><?= (int)$stats['pending_requests'] ?></span>
@@ -1211,6 +1215,13 @@ a {
                     </div>
                     <span>Manage Evacuation</span>
                 </a>
+
+                <a href="admin/rescue_team.php" class="action-card">
+                    <div class="ac-icon" style="background:#1565c0;">
+                        <i class="fa-solid fa-person-rifle"></i>
+                    </div>
+                    <span>Rescue Team</span>
+                </a>
             </section>
 
             <div class="section-hd">
@@ -1327,14 +1338,14 @@ a {
                     <span>Active Alerts</span>
                 </a>
 
-                <a href="#" class="action-card">
+                <a href="rescue_team.php" class="action-card">
                     <div class="ac-icon" style="background:#1565c0;">
                         <i class="fa-solid fa-person-rifle"></i>
                     </div>
                     <span>My Missions</span>
                 </a>
 
-                <a href="#" class="action-card">
+                <a href="rescue_team.php?view=requests" class="action-card">
                     <div class="ac-icon" style="background:#e65100;">
                         <i class="fa-solid fa-triangle-exclamation"></i>
                     </div>

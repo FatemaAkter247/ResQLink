@@ -1,0 +1,14 @@
+{
+    "intelephense.environment.phpVersion": "8.0.30",
+    "intelephense.environment.includePaths": [
+        "D:/xampp/php"
+    ],
+    "php.validate.executablePath": "D:/xampp/php/php.exe",
+    "files.exclude": {
+        "**/.git": true
+    },
+    "editor.formatOnSave": false,
+    "[php]": {
+        "editor.defaultFormatter": "bmewburn.vscode-intelephense-client"
+    }
+}

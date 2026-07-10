@@ -16,7 +16,7 @@ $total_users = $conn->query("SELECT COUNT(*) AS total FROM users")->fetch_assoc(
 $total_resources = $conn->query("SELECT COUNT(*) AS total FROM emergency_resources")->fetch_assoc()['total'];
 $total_shelters = $conn->query("SELECT COUNT(*) AS total FROM shelters")->fetch_assoc()['total'];
 $active_alerts = $conn->query("SELECT COUNT(*) AS total FROM disaster_alerts WHERE status='published'")->fetch_assoc()['total'];
-$total_teams = $conn->query("SELECT COUNT(*) AS total FROM rescue_teams")->fetch_assoc()['total'];
+$total_teams = $conn->query("SELECT COUNT(*) AS total FROM users WHERE role_id = 3 AND is_active = 1")->fetch_assoc()['total'];
 ?>
 
 <!DOCTYPE html>
