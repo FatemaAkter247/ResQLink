@@ -910,11 +910,6 @@ a {
             <a href="admin/create_alert.php" class="nav-link">
                 <i class="fa-solid fa-circle-plus"></i> Create Alert
             </a>
-            <!-- Emergency Alert Generator feature start -->
-            <a href="admin/ai_alert_generator.php" class="nav-link">
-                <i class="fa-solid fa-robot"></i> AI Emergency Alert Generator
-            </a>
-            <!-- Emergency Alert Generator feature end -->
 
             <span class="nav-label">Management</span>
 
@@ -1178,22 +1173,6 @@ a {
                     </div>
                     <span>Create Alert</span>
                 </a>
-
-                <!-- Emergency Alert Generator feature start -->
-                <a href="admin/ai_alert_generator.php" class="action-card">
-                    <div class="ac-icon" style="background:#667eea;">
-                        <i class="fa-solid fa-robot"></i>
-                    </div>
-                    <span>Generate Emergency Alert</span>
-                </a>
-
-                <a href="admin/ai_alerts_list.php" class="action-card">
-                    <div class="ac-icon" style="background:#764ba2;">
-                        <i class="fa-solid fa-list-check"></i>
-                    </div>
-                    <span>View AI Alerts</span>
-                </a>
-                <!-- Emergency Alert Generator feature end -->
 
                 <a href="admin/manage_shelters.php" class="action-card">
                     <div class="ac-icon" style="background:#1565c0;">
