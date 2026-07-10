@@ -543,6 +543,16 @@ $result = $conn->query("SELECT * FROM shelters ORDER BY created_at DESC");
             <i class="fa-solid fa-truck-medical" style="color:#dc2626;"></i> Report Emergency
         </a>
 
+        <span class="nav-label">Missing Students</span>
+
+        <a href="missing_students.php" class="nav-link">
+            <i class="fa-solid fa-user-magnifying-glass"></i> Missing Student Alerts
+        </a>
+
+        <a href="report_missing_student.php" class="nav-link">
+            <i class="fa-solid fa-person-circle-question" style="color:#b45309;"></i> Report Missing Student
+        </a>
+
         <span class="nav-label">Disaster Info</span>
 
         <a href="alerts.php" class="nav-link">

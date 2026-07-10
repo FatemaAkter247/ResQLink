@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS `missing_student_reports` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `reported_by` int(11) NOT NULL,
+  `student_name` varchar(120) NOT NULL,
+  `student_id_number` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `gender` enum('male','female','other') DEFAULT NULL,
+  `description` text NOT NULL,
+  `last_seen_location` varchar(255) NOT NULL,
+  `last_seen_at` datetime NOT NULL,
+  `reporter_relationship` varchar(80) NOT NULL,
+  `reporter_contact` varchar(60) NOT NULL,
+  `status` enum('pending','approved','rejected','found') NOT NULL DEFAULT 'pending',
+  `reviewed_by` int(11) DEFAULT NULL,
+  `review_notes` varchar(255) DEFAULT NULL,
+  `reviewed_at` timestamp NULL DEFAULT NULL,
+  `found_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `fk_msr_reporter` (`reported_by`),
+  KEY `fk_msr_reviewer` (`reviewed_by`),
+  KEY `idx_msr_status_time` (`status`,`created_at`),
+  CONSTRAINT `fk_msr_reporter` FOREIGN KEY (`reported_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_msr_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `missing_student_sightings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `report_id` int(11) NOT NULL,
+  `sighted_by` int(11) NOT NULL,
+  `location` varchar(255) NOT NULL,
+  `sighted_at` datetime NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `fk_sighting_report` (`report_id`),
+  KEY `fk_sighting_user` (`sighted_by`),
+  CONSTRAINT `fk_sighting_report` FOREIGN KEY (`report_id`) REFERENCES `missing_student_reports` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_sighting_user` FOREIGN KEY (`sighted_by`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

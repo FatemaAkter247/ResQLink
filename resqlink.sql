@@ -125,6 +125,48 @@ CREATE TABLE `evacuation_status` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `missing_student_reports`
+--
+
+CREATE TABLE `missing_student_reports` (
+  `id` int(11) NOT NULL,
+  `reported_by` int(11) NOT NULL,
+  `student_name` varchar(120) NOT NULL,
+  `student_id_number` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `gender` enum('male','female','other') DEFAULT NULL,
+  `description` text NOT NULL,
+  `last_seen_location` varchar(255) NOT NULL,
+  `last_seen_at` datetime NOT NULL,
+  `reporter_relationship` varchar(80) NOT NULL,
+  `reporter_contact` varchar(60) NOT NULL,
+  `status` enum('pending','approved','rejected','found') NOT NULL DEFAULT 'pending',
+  `reviewed_by` int(11) DEFAULT NULL,
+  `review_notes` varchar(255) DEFAULT NULL,
+  `reviewed_at` timestamp NULL DEFAULT NULL,
+  `found_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `missing_student_sightings`
+--
+
+CREATE TABLE `missing_student_sightings` (
+  `id` int(11) NOT NULL,
+  `report_id` int(11) NOT NULL,
+  `sighted_by` int(11) NOT NULL,
+  `location` varchar(255) NOT NULL,
+  `sighted_at` datetime NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `post_disaster_instructions`
 --
 
@@ -295,6 +337,23 @@ ALTER TABLE `evacuation_status`
   ADD KEY `idx_evac_user_time` (`user_id`,`updated_at`);
 
 --
+-- Indexes for table `missing_student_reports`
+--
+ALTER TABLE `missing_student_reports`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_msr_reporter` (`reported_by`),
+  ADD KEY `fk_msr_reviewer` (`reviewed_by`),
+  ADD KEY `idx_msr_status_time` (`status`,`created_at`);
+
+--
+-- Indexes for table `missing_student_sightings`
+--
+ALTER TABLE `missing_student_sightings`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_sighting_report` (`report_id`),
+  ADD KEY `fk_sighting_user` (`sighted_by`);
+
+--
 -- Indexes for table `post_disaster_instructions`
 --
 ALTER TABLE `post_disaster_instructions`
@@ -389,6 +448,18 @@ ALTER TABLE `evacuation_status`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `missing_student_reports`
+--
+ALTER TABLE `missing_student_reports`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `missing_student_sightings`
+--
+ALTER TABLE `missing_student_sightings`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `post_disaster_instructions`
 --
 ALTER TABLE `post_disaster_instructions`
@@ -471,6 +542,20 @@ ALTER TABLE `emergency_resources`
 ALTER TABLE `evacuation_status`
   ADD CONSTRAINT `fk_evac_shelter` FOREIGN KEY (`shelter_id`) REFERENCES `shelters` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_evac_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `missing_student_reports`
+--
+ALTER TABLE `missing_student_reports`
+  ADD CONSTRAINT `fk_msr_reporter` FOREIGN KEY (`reported_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_msr_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `missing_student_sightings`
+--
+ALTER TABLE `missing_student_sightings`
+  ADD CONSTRAINT `fk_sighting_report` FOREIGN KEY (`report_id`) REFERENCES `missing_student_reports` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_sighting_user` FOREIGN KEY (`sighted_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `post_disaster_instructions`

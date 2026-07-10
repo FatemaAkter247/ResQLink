@@ -11,76 +11,87 @@ $user_id = (int) $_SESSION['user_id'];
 $success = "";
 $error = "";
 
-// shelters for dropdown
-$shelters = $conn->query("
-    SELECT id, shelter_name, address, city, total_capacity, current_occupancy, status
-    FROM shelters
-    WHERE status IN ('open', 'full')
-    ORDER BY shelter_name ASC
-");
+function e($value)
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
 
-// latest status for this user
-$currentStatus = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $student_name = trim($_POST['student_name'] ?? '');
+    $student_id_number = trim($_POST['student_id_number'] ?? '');
+    $age = trim($_POST['age'] ?? '');
+    $gender = trim($_POST['gender'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $last_seen_location = trim($_POST['last_seen_location'] ?? '');
+    $last_seen_at = trim($_POST['last_seen_at'] ?? '');
+    $reporter_relationship = trim($_POST['reporter_relationship'] ?? '');
+    $reporter_contact = trim($_POST['reporter_contact'] ?? '');
+
+    $allowedGenders = ['male', 'female', 'other'];
+    $gender = in_array($gender, $allowedGenders, true) ? $gender : null;
+    $age = ($age !== '' && ctype_digit($age)) ? (int)$age : null;
+
+    if ($student_name === '' || $description === '' || $last_seen_location === ''
+        || $last_seen_at === '' || $reporter_relationship === '' || $reporter_contact === '') {
+        $error = "Please fill in all required fields.";
+    } else {
+        $stmt = $conn->prepare("
+            INSERT INTO missing_student_reports
+            (reported_by, student_name, student_id_number, age, gender, description,
+             last_seen_location, last_seen_at, reporter_relationship, reporter_contact, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+        ");
+        $stmt->bind_param(
+            "ississssss",
+            $user_id,
+            $student_name,
+            $student_id_number,
+            $age,
+            $gender,
+            $description,
+            $last_seen_location,
+            $last_seen_at,
+            $reporter_relationship,
+            $reporter_contact
+        );
+
+        if ($stmt->execute()) {
+            $success = "Report submitted. An administrator will review it shortly — you can track its status below.";
+        } else {
+            $error = "Failed to submit the report. Please try again.";
+        }
+        $stmt->close();
+    }
+}
+
+// this user's own submitted reports
+$myReports = [];
 $stmt = $conn->prepare("
-    SELECT es.*, s.shelter_name, s.address, s.city
-    FROM evacuation_status es
-    LEFT JOIN shelters s ON es.shelter_id = s.id
-    WHERE es.user_id = ?
-    ORDER BY es.id DESC
-    LIMIT 1
+    SELECT id, student_name, last_seen_location, last_seen_at, status, review_notes, created_at
+    FROM missing_student_reports
+    WHERE reported_by = ?
+    ORDER BY created_at DESC
+    LIMIT 8
 ");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $res = $stmt->get_result();
-if ($res && $res->num_rows > 0) {
-    $currentStatus = $res->fetch_assoc();
+while ($row = $res->fetch_assoc()) {
+    $myReports[] = $row;
 }
 $stmt->close();
 
-// submit
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $status = trim($_POST['status'] ?? '');
-    $notes = trim($_POST['notes'] ?? '');
-    $shelter_id = $_POST['shelter_id'] ?? '';
-
-    $allowed = ['safe', 'evacuated', 'need_help'];
-
-    if (!in_array($status, $allowed, true)) {
-        $error = "Please select a valid status.";
-    } elseif ($status === 'evacuated' && $shelter_id === '') {
-        $error = "Please select a shelter if you are evacuated.";
-    } else {
-        $shelter_value = ($shelter_id === '') ? null : (int)$shelter_id;
-
-        $insert = $conn->prepare("
-            INSERT INTO evacuation_status (user_id, status, shelter_id, notes, updated_at)
-            VALUES (?, ?, ?, ?, NOW())
-        ");
-        $insert->bind_param("isis", $user_id, $status, $shelter_value, $notes);
-
-        if ($insert->execute()) {
-            $success = "Evacuation status saved successfully.";
-        } else {
-            $error = "Failed to save evacuation status.";
-        }
-        $insert->close();
-
-        // reload latest
-        $stmt = $conn->prepare("
-            SELECT es.*, s.shelter_name, s.address, s.city
-            FROM evacuation_status es
-            LEFT JOIN shelters s ON es.shelter_id = s.id
-            WHERE es.user_id = ?
-            ORDER BY es.id DESC
-            LIMIT 1
-        ");
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        if ($res && $res->num_rows > 0) {
-            $currentStatus = $res->fetch_assoc();
-        }
-        $stmt->close();
+function reportStatusClass($status)
+{
+    switch ($status) {
+        case 'approved':
+            return 'st-assigned';
+        case 'found':
+            return 'st-resolved';
+        case 'rejected':
+            return 'st-cancelled';
+        default:
+            return 'st-pending';
     }
 }
 
@@ -113,24 +124,14 @@ $initials = strtoupper(substr($username_raw, 0, 1));
 
 // Unread alerts count for sidebar badge
 $unread_count = 0;
-$uc = $conn->query("SELECT COUNT(*) AS c FROM alert_notifications WHERE user_id = $user_id AND is_read = 0");
-if ($uc && $ucr = $uc->fetch_assoc()) {
+$uc = $conn->prepare("SELECT COUNT(*) AS c FROM alert_notifications WHERE user_id = ? AND is_read = 0");
+$uc->bind_param("i", $user_id);
+$uc->execute();
+$ucRes = $uc->get_result();
+if ($ucRes && $ucr = $ucRes->fetch_assoc()) {
     $unread_count = (int)$ucr['c'];
 }
-
-// Status pill styling helper for the "Latest Status" panel
-function evacStatusClass($status)
-{
-    $s = strtolower(trim($status));
-    if ($s === 'safe') {
-        return 'ev-safe';
-    } elseif ($s === 'evacuated') {
-        return 'ev-evac';
-    } elseif ($s === 'need_help') {
-        return 'ev-help';
-    }
-    return 'ev-default';
-}
+$uc->close();
 ?>
 
 <!DOCTYPE html>
@@ -138,23 +139,21 @@ function evacStatusClass($status)
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evacuation Status - ResQLink</title>
+    <title>Report Missing Student - ResQLink</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
             --accent: #2e7d32;
             --accent-dark: #1b5e20;
             --accent-light: #e8f5e9;
+            --warn: #b45309;
+            --warn-dark: #92400e;
             --sidebar-width: 265px;
             --bg: #f0f2f5;
             --white: #ffffff;
@@ -175,7 +174,6 @@ function evacStatusClass($status)
 
         a { color: inherit; }
 
-        /* ---------- Sidebar ---------- */
         .sidebar {
             width: var(--sidebar-width);
             background: var(--white);
@@ -209,18 +207,10 @@ function evacStatusClass($status)
             place-items: center;
         }
 
-        .brand-name {
-            font-size: 18px;
-            font-weight: 800;
-        }
-
+        .brand-name { font-size: 18px; font-weight: 800; }
         .brand-name span { color: var(--accent); }
 
-        .sidebar-nav {
-            flex: 1;
-            padding: 16px 12px;
-            overflow-y: auto;
-        }
+        .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
 
         .nav-label {
             display: block;
@@ -245,8 +235,7 @@ function evacStatusClass($status)
             text-decoration: none;
         }
 
-        .nav-link:hover,
-        .nav-link.active {
+        .nav-link:hover, .nav-link.active {
             background: var(--accent-light);
             color: var(--accent);
         }
@@ -262,14 +251,9 @@ function evacStatusClass($status)
             border-radius: 20px;
         }
 
-        .sidebar-footer {
-            padding: 14px 12px;
-            border-top: 1px solid var(--border);
-        }
-
+        .sidebar-footer { padding: 14px 12px; border-top: 1px solid var(--border); }
         .logout { color: #dc2626; }
 
-        /* ---------- Main ---------- */
         .main {
             margin-left: var(--sidebar-width);
             width: calc(100% - var(--sidebar-width));
@@ -292,11 +276,7 @@ function evacStatusClass($status)
         .topbar-title h1 { font-size: 17px; font-weight: 800; }
         .topbar-title p { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
 
         .icon-btn {
             width: 38px;
@@ -383,7 +363,7 @@ function evacStatusClass($status)
             width: 40px;
             height: 40px;
             border-radius: 12px;
-            background: var(--accent);
+            background: var(--warn);
             color: #fff;
             display: grid;
             place-items: center;
@@ -410,8 +390,21 @@ function evacStatusClass($status)
             border-color: var(--accent);
         }
 
-        /* ---------- Layout grid ---------- */
-        .evac-grid {
+        .info-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            border-radius: var(--radius);
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: var(--warn-dark);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .sos-grid {
             display: grid;
             grid-template-columns: 1.1fr 1fr;
             gap: 20px;
@@ -439,20 +432,15 @@ function evacStatusClass($status)
             width: 34px;
             height: 34px;
             border-radius: 10px;
-            background: var(--accent-light);
-            color: var(--accent);
+            background: #fffbeb;
+            color: var(--warn);
             display: grid;
             place-items: center;
             font-size: 14px;
         }
 
-        .panel-sub {
-            color: var(--muted);
-            font-size: 13px;
-            margin-bottom: 20px;
-        }
+        .panel-sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
 
-        /* ---------- Alerts ---------- */
         .flash {
             display: flex;
             align-items: center;
@@ -464,87 +452,12 @@ function evacStatusClass($status)
             margin-bottom: 18px;
         }
 
-        .flash-success {
-            background: #e8f5e9;
-            color: #15803d;
-            border: 1px solid #a5d6a7;
-        }
+        .flash-success { background: #e8f5e9; color: #15803d; border: 1px solid #a5d6a7; }
+        .flash-error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
 
-        .flash-error {
-            background: #fef2f2;
-            color: #b91c1c;
-            border: 1px solid #fecaca;
-        }
+        .form-label { font-size: 13px; font-weight: 700; margin-bottom: 6px; display: block; }
 
-        /* ---------- Latest status panel ---------- */
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            border-radius: 30px;
-            font-size: 13px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-            color: #fff;
-            margin-bottom: 18px;
-        }
-
-        .ev-safe { background: #15803d; }
-        .ev-evac { background: #2563eb; }
-        .ev-help { background: #b91c1c; }
-        .ev-default { background: #6b7280; }
-
-        .status-info {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .status-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            font-size: 13px;
-        }
-
-        .status-row i {
-            width: 30px;
-            height: 30px;
-            border-radius: 8px;
-            background: #f3f4f6;
-            color: var(--muted);
-            display: grid;
-            place-items: center;
-            flex-shrink: 0;
-        }
-
-        .status-row .label { color: var(--muted); font-weight: 600; min-width: 70px; }
-        .status-row .value { font-weight: 700; }
-
-        .no-status {
-            text-align: center;
-            color: var(--muted);
-            padding: 20px 0;
-        }
-
-        .no-status i {
-            font-size: 36px;
-            color: var(--accent);
-            margin-bottom: 10px;
-        }
-
-        /* ---------- Form ---------- */
-        .form-label {
-            font-size: 13px;
-            font-weight: 700;
-            margin-bottom: 6px;
-            display: block;
-        }
-
-        .form-select,
-        .form-control {
+        .form-select, .form-control {
             border-radius: 10px;
             border: 1px solid var(--border);
             padding: 11px 14px;
@@ -552,41 +465,81 @@ function evacStatusClass($status)
             font-family: inherit;
         }
 
-        .form-select:focus,
-        .form-control:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.20);
-        }
-
-        .form-text {
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: 5px;
+        .form-select:focus, .form-control:focus {
+            border-color: var(--warn);
+            box-shadow: 0 0 0 0.2rem rgba(180, 83, 9, 0.15);
         }
 
         .mb-3 { margin-bottom: 18px; }
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-        .btn-save {
+        .btn-sos {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
-            padding: 11px 22px;
+            width: 100%;
+            padding: 13px 22px;
             border-radius: 10px;
-            background: var(--accent);
+            background: var(--warn);
             color: #fff;
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 15px;
+            font-weight: 800;
             border: none;
             cursor: pointer;
             transition: all .2s ease;
         }
 
-        .btn-save:hover {
-            background: var(--accent-dark);
-            transform: translateY(-2px);
+        .btn-sos:hover { background: var(--warn-dark); transform: translateY(-2px); }
+
+        .req-item {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
         }
 
-        /* ---------- Sidebar overlay (mobile) ---------- */
+        .req-item:last-child { margin-bottom: 0; }
+
+        .req-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .req-type { font-size: 14px; font-weight: 800; }
+        .req-desc { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+
+        .req-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            color: #fff;
+        }
+
+        .st-pending { background: #ca8a04; }
+        .st-assigned { background: #2563eb; }
+        .st-resolved { background: #15803d; }
+        .st-cancelled { background: #6b7280; }
+
+        .no-req { text-align: center; color: var(--muted); padding: 20px 0; }
+        .no-req i { font-size: 36px; color: var(--warn); margin-bottom: 10px; }
+
         .sidebar-overlay {
             display: none;
             position: fixed;
@@ -598,7 +551,8 @@ function evacStatusClass($status)
         .sidebar-overlay.open { display: block; }
 
         @media (max-width: 900px) {
-            .evac-grid { grid-template-columns: 1fr; }
+            .sos-grid { grid-template-columns: 1fr; }
+            .row-2 { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 800px) {
@@ -646,7 +600,7 @@ function evacStatusClass($status)
             <i class="fa-solid fa-user-magnifying-glass"></i> Missing Student Alerts
         </a>
 
-        <a href="report_missing_student.php" class="nav-link">
+        <a href="report_missing_student.php" class="nav-link active">
             <i class="fa-solid fa-person-circle-question" style="color:#b45309;"></i> Report Missing Student
         </a>
 
@@ -669,11 +623,11 @@ function evacStatusClass($status)
 
         <span class="nav-label">My Status</span>
 
-        <a href="evacuation_status.php" class="nav-link active">
+        <a href="evacuation_status.php" class="nav-link">
             <i class="fa-solid fa-person-walking-arrow-right"></i> Evacuation Status
         </a>
 
-        <a href="request_help.php" class="nav-link">
+        <a href="chatbot.php" class="nav-link">
             <i class="fa-solid fa-hand-holding-heart"></i> Request Help
         </a>
     </nav>
@@ -693,7 +647,7 @@ function evacStatusClass($status)
             </button>
 
             <div class="topbar-title">
-                <h1>Evacuation Status</h1>
+                <h1>Report Missing Student</h1>
                 <p><?php echo date('l, F j, Y'); ?></p>
             </div>
         </div>
@@ -723,12 +677,17 @@ function evacStatusClass($status)
     <main class="content">
         <div class="page-head">
             <h2>
-                <span class="ph-icon"><i class="fa-solid fa-person-walking-arrow-right"></i></span>
-                Evacuation Status Tracking
+                <span class="ph-icon"><i class="fa-solid fa-person-circle-question"></i></span>
+                Report a Missing Student
             </h2>
-            <a href="dashboard.php" class="back-btn">
-                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            <a href="missing_students.php" class="back-btn">
+                <i class="fa-solid fa-arrow-left"></i> View Missing Student Alerts
             </a>
+        </div>
+
+        <div class="info-bar">
+            <i class="fa-solid fa-circle-info"></i>
+            Every report is reviewed by an administrator before it appears publicly on the Missing Student Alerts page.
         </div>
 
         <?php if ($success): ?>
@@ -743,107 +702,113 @@ function evacStatusClass($status)
             </div>
         <?php endif; ?>
 
-        <div class="evac-grid">
-            <!-- LEFT: Update form -->
+        <div class="sos-grid">
             <div class="panel">
                 <div class="panel-title">
-                    <span class="pt-ico"><i class="fa-solid fa-pen-to-square"></i></span>
-                    Update Your Status
+                    <span class="pt-ico"><i class="fa-solid fa-person-circle-question"></i></span>
+                    Missing Student Report
                 </div>
-                <p class="panel-sub">Update your current situation during an emergency.</p>
+                <p class="panel-sub">
+                    Provide as much detail as possible to help identify and locate the student quickly.
+                </p>
 
                 <form method="POST">
                     <div class="mb-3">
-                        <label class="form-label">Select Status</label>
-                        <select name="status" id="statusSelect" class="form-select w-100" required>
-                            <option value="">Choose status</option>
-                            <option value="safe">Safe</option>
-                            <option value="evacuated">Evacuated</option>
-                            <option value="need_help">Need Help</option>
-                        </select>
+                        <label class="form-label">Student's Full Name</label>
+                        <input type="text" name="student_name" class="form-control w-100" required
+                               placeholder="e.g. Rahim Uddin">
                     </div>
 
-                    <div class="mb-3" id="shelterWrap">
-                        <label class="form-label">Select Shelter</label>
-                        <select name="shelter_id" class="form-select w-100">
-                            <option value="">No shelter selected</option>
-                            <?php if ($shelters): ?>
-                                <?php while ($shelter = $shelters->fetch_assoc()): ?>
-                                    <?php
-                                    $available = (int)$shelter['total_capacity'] - (int)$shelter['current_occupancy'];
-                                    if ($available < 0) $available = 0;
-                                    ?>
-                                    <option value="<?php echo (int)$shelter['id']; ?>">
-                                        <?php echo htmlspecialchars($shelter['shelter_name'] . " - " . $shelter['city'] . " - Available: " . $available); ?>
-                                    </option>
-                                <?php endwhile; ?>
-                            <?php endif; ?>
-                        </select>
-                        <div class="form-text">Select a shelter only if you are evacuated.</div>
+                    <div class="row-2 mb-3">
+                        <div>
+                            <label class="form-label">Student ID (if known)</label>
+                            <input type="text" name="student_id_number" class="form-control w-100"
+                                   placeholder="e.g. 2021-CSE-045">
+                        </div>
+                        <div>
+                            <label class="form-label">Age (if known)</label>
+                            <input type="number" name="age" min="1" max="120" class="form-control w-100" placeholder="e.g. 20">
+                        </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control w-100" rows="4" placeholder="Add any extra details..."></textarea>
+                        <label class="form-label">Gender</label>
+                        <select name="gender" class="form-select w-100">
+                            <option value="">Prefer not to specify</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
                     </div>
 
-                    <button type="submit" class="btn-save">
-                        <i class="fa-solid fa-floppy-disk"></i> Save Status
+                    <div class="mb-3">
+                        <label class="form-label">Physical Description / What They Were Wearing</label>
+                        <textarea name="description" class="form-control w-100" rows="3" required
+                                  placeholder="Height, build, clothing, any identifying features..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Last Seen Location</label>
+                        <input type="text" name="last_seen_location" class="form-control w-100" required
+                               placeholder="e.g. Central Library, near the main gate">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Last Seen Date &amp; Time</label>
+                        <input type="datetime-local" name="last_seen_at" class="form-control w-100" required>
+                    </div>
+
+                    <div class="row-2 mb-3">
+                        <div>
+                            <label class="form-label">Your Relationship to the Student</label>
+                            <input type="text" name="reporter_relationship" class="form-control w-100" required
+                                   placeholder="e.g. Friend, Classmate, Teacher">
+                        </div>
+                        <div>
+                            <label class="form-label">Your Contact Number</label>
+                            <input type="text" name="reporter_contact" class="form-control w-100" required
+                                   placeholder="e.g. 01XXXXXXXXX">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-sos">
+                        <i class="fa-solid fa-paper-plane"></i> Submit Report
                     </button>
                 </form>
             </div>
 
-            <!-- RIGHT: Latest status -->
             <div class="panel">
                 <div class="panel-title">
                     <span class="pt-ico"><i class="fa-solid fa-clock-rotate-left"></i></span>
-                    Latest Status
+                    My Submitted Reports
                 </div>
-                <p class="panel-sub">Your most recent evacuation update.</p>
+                <p class="panel-sub">Track the review status of reports you've submitted.</p>
 
-                <?php if ($currentStatus): ?>
-                    <span class="status-pill <?php echo evacStatusClass($currentStatus['status']); ?>">
-                        <i class="fa-solid fa-circle-dot"></i>
-                        <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $currentStatus['status']))); ?>
-                    </span>
-
-                    <div class="status-info">
-                        <?php if (!empty($currentStatus['shelter_name'])): ?>
-                            <div class="status-row">
-                                <i class="fa-solid fa-house-chimney"></i>
-                                <span class="label">Shelter</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['shelter_name']); ?></span>
+                <?php if (!empty($myReports)): ?>
+                    <?php foreach ($myReports as $r): ?>
+                        <div class="req-item">
+                            <div class="req-head">
+                                <span class="req-type"><?php echo e($r['student_name']); ?></span>
+                                <span class="pill <?php echo reportStatusClass($r['status']); ?>">
+                                    <?php echo e(ucfirst($r['status'])); ?>
+                                </span>
                             </div>
-                            <div class="status-row">
-                                <i class="fa-solid fa-location-dot"></i>
-                                <span class="label">Address</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['address']); ?></span>
+                            <div class="req-desc">
+                                <i class="fa-solid fa-location-dot"></i> <?php echo e($r['last_seen_location']); ?>
+                                &nbsp;·&nbsp; Last seen <?php echo e(date('M j, Y H:i', strtotime($r['last_seen_at']))); ?>
                             </div>
-                            <div class="status-row">
-                                <i class="fa-solid fa-city"></i>
-                                <span class="label">City</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['city'] ?? 'N/A'); ?></span>
+                            <?php if (!empty($r['review_notes'])): ?>
+                                <div class="req-meta"><i class="fa-solid fa-note-sticky"></i> <?php echo e($r['review_notes']); ?></div>
+                            <?php endif; ?>
+                            <div class="req-meta">
+                                <span>Submitted <?php echo e($r['created_at']); ?></span>
                             </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($currentStatus['notes'])): ?>
-                            <div class="status-row">
-                                <i class="fa-solid fa-note-sticky"></i>
-                                <span class="label">Notes</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['notes']); ?></span>
-                            </div>
-                        <?php endif; ?>
-
-                        <div class="status-row">
-                            <i class="fa-solid fa-clock"></i>
-                            <span class="label">Updated</span>
-                            <span class="value"><?php echo htmlspecialchars($currentStatus['updated_at']); ?></span>
                         </div>
-                    </div>
+                    <?php endforeach; ?>
                 <?php else: ?>
-                    <div class="no-status">
-                        <i class="fa-solid fa-circle-question"></i>
-                        <p>No status set yet. Update your status using the form.</p>
+                    <div class="no-req">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <p>You haven't submitted any reports yet.</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -852,15 +817,6 @@ function evacStatusClass($status)
 </div>
 
 <script>
-const statusSelect = document.getElementById('statusSelect');
-const shelterWrap = document.getElementById('shelterWrap');
-
-function toggleShelterField() {
-    shelterWrap.style.display = statusSelect.value === 'evacuated' ? 'block' : 'none';
-}
-toggleShelterField();
-statusSelect.addEventListener('change', toggleShelterField);
-
 function openSidebar() {
     document.getElementById('sidebar').classList.add('open');
     document.getElementById('overlay').classList.add('open');

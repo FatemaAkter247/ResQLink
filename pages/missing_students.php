@@ -2,11 +2,42 @@
 session_start();
 require_once __DIR__ . "/../DB/db.php";
 
-// Public emergency info: viewing emergency resources must NOT require login.
-// Logged-in users still get their personalised shell; guests get safe defaults.
-$is_guest = !isset($_SESSION['user_id']);
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
 
-$user_id = (int)($_SESSION['user_id'] ?? 0);
+$user_id = (int) $_SESSION['user_id'];
+
+function e($value)
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+$view = ($_GET['view'] ?? 'active') === 'history' ? 'history' : 'active';
+
+if ($view === 'history') {
+    $result = $conn->query("
+        SELECT id, student_name, age, gender, last_seen_location, last_seen_at, status, found_at, created_at
+        FROM missing_student_reports
+        WHERE status = 'found'
+        ORDER BY found_at DESC
+    ");
+} else {
+    $result = $conn->query("
+        SELECT id, student_name, age, gender, last_seen_location, last_seen_at, status, found_at, created_at
+        FROM missing_student_reports
+        WHERE status = 'approved'
+        ORDER BY created_at DESC
+    ");
+}
+
+$reports = [];
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $reports[] = $row;
+    }
+}
 
 // Session/user info for dashboard shell
 $username_raw = $_SESSION['full_name'] ?? 'User';
@@ -35,55 +66,15 @@ $role_labels = [
 $role_label = $role_labels[$role] ?? 'User';
 $initials = strtoupper(substr($username_raw, 0, 1));
 
-// Edit/Delete actions only for admin roles
-$can_manage = ($role === 'admin' || $role === 'system_admin');
-
-// Unread alerts count for sidebar badge
 $unread_count = 0;
-$uc = $conn->query("SELECT COUNT(*) AS c FROM alert_notifications WHERE user_id = $user_id AND is_read = 0");
-if ($uc && $ucr = $uc->fetch_assoc()) {
+$uc = $conn->prepare("SELECT COUNT(*) AS c FROM alert_notifications WHERE user_id = ? AND is_read = 0");
+$uc->bind_param("i", $user_id);
+$uc->execute();
+$ucRes = $uc->get_result();
+if ($ucRes && $ucr = $ucRes->fetch_assoc()) {
     $unread_count = (int)$ucr['c'];
 }
-
-$result = $conn->query("SELECT * FROM emergency_resources ORDER BY id DESC");
-
-function getResourceIcon($resourceType)
-{
-    $type = strtolower(trim($resourceType));
-
-    if (strpos($type, 'water') !== false) {
-        return 'fa-solid fa-bottle-water';
-    } elseif (strpos($type, 'food') !== false) {
-        return 'fa-solid fa-bowl-food';
-    } elseif (strpos($type, 'medic') !== false || strpos($type, 'health') !== false) {
-        return 'fa-solid fa-kit-medical';
-    } elseif (strpos($type, 'cloth') !== false || strpos($type, 'blanket') !== false) {
-        return 'fa-solid fa-shirt';
-    } elseif (strpos($type, 'fuel') !== false) {
-        return 'fa-solid fa-gas-pump';
-    } elseif (strpos($type, 'tent') !== false || strpos($type, 'shelter') !== false) {
-        return 'fa-solid fa-tent';
-    } elseif (strpos($type, 'vehicle') !== false || strpos($type, 'transport') !== false) {
-        return 'fa-solid fa-truck';
-    } else {
-        return 'fa-solid fa-boxes-stacked';
-    }
-}
-
-function getResourceStatusClass($status)
-{
-    $status = strtolower(trim($status));
-
-    if (strpos($status, 'available') !== false) {
-        return 'st-open';
-    } elseif (strpos($status, 'low') !== false) {
-        return 'st-low';
-    } elseif (strpos($status, 'out') !== false || strpos($status, 'unavailable') !== false || strpos($status, 'depleted') !== false) {
-        return 'st-full';
-    } else {
-        return 'st-closed';
-    }
-}
+$uc->close();
 ?>
 
 <!DOCTYPE html>
@@ -91,23 +82,22 @@ function getResourceStatusClass($status)
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resources - ResQLink</title>
+    <title>Missing Student Alerts - ResQLink</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
             --accent: #2e7d32;
             --accent-dark: #1b5e20;
             --accent-light: #e8f5e9;
+            --warn: #b45309;
+            --warn-dark: #92400e;
+            --warn-light: #fffbeb;
             --sidebar-width: 265px;
             --bg: #f0f2f5;
             --white: #ffffff;
@@ -128,7 +118,6 @@ function getResourceStatusClass($status)
 
         a { color: inherit; }
 
-        /* ---------- Sidebar ---------- */
         .sidebar {
             width: var(--sidebar-width);
             background: var(--white);
@@ -162,18 +151,10 @@ function getResourceStatusClass($status)
             place-items: center;
         }
 
-        .brand-name {
-            font-size: 18px;
-            font-weight: 800;
-        }
-
+        .brand-name { font-size: 18px; font-weight: 800; }
         .brand-name span { color: var(--accent); }
 
-        .sidebar-nav {
-            flex: 1;
-            padding: 16px 12px;
-            overflow-y: auto;
-        }
+        .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
 
         .nav-label {
             display: block;
@@ -198,8 +179,7 @@ function getResourceStatusClass($status)
             text-decoration: none;
         }
 
-        .nav-link:hover,
-        .nav-link.active {
+        .nav-link:hover, .nav-link.active {
             background: var(--accent-light);
             color: var(--accent);
         }
@@ -215,14 +195,9 @@ function getResourceStatusClass($status)
             border-radius: 20px;
         }
 
-        .sidebar-footer {
-            padding: 14px 12px;
-            border-top: 1px solid var(--border);
-        }
-
+        .sidebar-footer { padding: 14px 12px; border-top: 1px solid var(--border); }
         .logout { color: #dc2626; }
 
-        /* ---------- Main ---------- */
         .main {
             margin-left: var(--sidebar-width);
             width: calc(100% - var(--sidebar-width));
@@ -245,11 +220,7 @@ function getResourceStatusClass($status)
         .topbar-title h1 { font-size: 17px; font-weight: 800; }
         .topbar-title p { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
 
         .icon-btn {
             width: 38px;
@@ -336,14 +307,16 @@ function getResourceStatusClass($status)
             width: 40px;
             height: 40px;
             border-radius: 12px;
-            background: var(--accent);
+            background: var(--warn);
             color: #fff;
             display: grid;
             place-items: center;
             font-size: 16px;
         }
 
-        .back-btn {
+        .head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        .tab-btn, .back-btn, .cta-btn {
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -357,175 +330,115 @@ function getResourceStatusClass($status)
             text-decoration: none;
         }
 
-        .back-btn:hover {
-            background: var(--accent-light);
-            color: var(--accent);
-            border-color: var(--accent);
+        .tab-btn:hover, .back-btn:hover {
+            background: var(--warn-light);
+            color: var(--warn-dark);
+            border-color: var(--warn);
         }
 
-        /* ---------- Resource Cards ---------- */
-        .resources-grid {
+        .tab-btn.active {
+            background: var(--warn);
+            color: #fff;
+            border-color: var(--warn);
+        }
+
+        .cta-btn {
+            background: var(--warn);
+            color: #fff;
+            border-color: var(--warn);
+        }
+
+        .cta-btn:hover { background: var(--warn-dark); color: #fff; }
+
+        .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 18px;
         }
 
-        .resource-card {
+        .card {
             background: var(--white);
             border: 1px solid var(--border);
-            border-top: 4px solid var(--accent);
             border-radius: var(--radius);
-            padding: 20px;
             box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
-            transition: transform .2s, box-shadow .2s;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .resource-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow);
-        }
-
-        .resource-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-
-        .resource-name {
-            font-size: 16px;
-            font-weight: 800;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .resource-name .rs-ico {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            background: var(--accent-light);
-            color: var(--accent);
-            display: grid;
-            place-items: center;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .resource-name .rn-text small {
-            display: block;
-            font-size: 11px;
-            font-weight: 700;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            margin-top: 2px;
-        }
-
-        .status-badge {
-            text-transform: uppercase;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: .05em;
-            padding: 5px 11px;
-            border-radius: 20px;
-            color: #fff;
-            white-space: nowrap;
-        }
-
-        .st-open { background: #15803d; }
-        .st-low { background: #ca8a04; }
-        .st-full { background: #b91c1c; }
-        .st-closed { background: #6b7280; }
-
-        .resource-info {
-            display: flex;
-            flex-direction: column;
-            gap: 9px;
-        }
-
-        .info-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-        }
-
-        .info-row i {
-            width: 30px;
-            height: 30px;
-            border-radius: 8px;
-            background: #f3f4f6;
-            color: var(--muted);
-            display: grid;
-            place-items: center;
-            flex-shrink: 0;
-        }
-
-        .info-row .label { color: var(--muted); font-weight: 600; }
-        .info-row .value { font-weight: 700; margin-left: auto; }
-
-        .qty-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 14px;
-            padding: 8px 16px;
-            border-radius: 12px;
-            background: var(--accent-light);
-            color: var(--accent-dark);
-            font-size: 15px;
-            font-weight: 800;
-            align-self: flex-start;
-        }
-
-        .card-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 16px;
-            padding-top: 14px;
-            border-top: 1px solid var(--border);
-        }
-
-        .btn-edit, .btn-del {
-            flex: 1;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 8px 14px;
-            border-radius: 9px;
-            font-size: 12px;
-            font-weight: 700;
+            overflow: hidden;
             text-decoration: none;
+            color: var(--text);
+            display: block;
+            transition: transform .15s ease;
         }
 
-        .btn-edit { background: #fff8e1; color: #ca8a04; border: 1px solid #fde68a; }
-        .btn-edit:hover { background: #ca8a04; color: #fff; }
+        .card:hover { transform: translateY(-3px); }
 
-        .btn-del { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-        .btn-del:hover { background: #dc2626; color: #fff; }
+        .card-top {
+            background: var(--warn-light);
+            padding: 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .card.history .card-top { background: var(--accent-light); }
+
+        .card-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: var(--warn);
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-size: 20px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .card.history .card-avatar { background: var(--accent); }
+
+        .card-name { font-size: 15px; font-weight: 800; margin-bottom: 2px; }
+        .card-sub { font-size: 11.5px; color: var(--muted); }
+
+        .card-body { padding: 16px 18px; }
+
+        .card-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 12.5px;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .card-row i { width: 14px; color: var(--warn); margin-top: 2px; }
+        .card.history .card-row i { color: var(--accent); }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .card.history .status-pill { background: #dcfce7; color: #166534; }
 
         .empty-state {
-            background: var(--white);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 40px;
             text-align: center;
+            padding: 60px 20px;
             color: var(--muted);
-            box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+            background: var(--white);
+            border: 1px dashed var(--border);
+            border-radius: var(--radius);
         }
 
-        .empty-state i {
-            font-size: 40px;
-            color: var(--accent);
-            margin-bottom: 12px;
-        }
+        .empty-state i { font-size: 44px; color: var(--warn); margin-bottom: 14px; }
 
-        /* ---------- Sidebar overlay (mobile) ---------- */
         .sidebar-overlay {
             display: none;
             position: fixed;
@@ -536,6 +449,14 @@ function getResourceStatusClass($status)
 
         .sidebar-overlay.open { display: block; }
 
+        @media (max-width: 1100px) {
+            .grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 700px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+
         @media (max-width: 800px) {
             .sidebar { transform: translateX(-100%); }
             .sidebar.open { transform: translateX(0); }
@@ -544,7 +465,6 @@ function getResourceStatusClass($status)
             .content { padding: 16px; }
             .topbar { padding: 0 16px; }
             .user-chip-role { display: none; }
-            .resources-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -578,7 +498,7 @@ function getResourceStatusClass($status)
 
         <span class="nav-label">Missing Students</span>
 
-        <a href="missing_students.php" class="nav-link">
+        <a href="missing_students.php" class="nav-link active">
             <i class="fa-solid fa-user-magnifying-glass"></i> Missing Student Alerts
         </a>
 
@@ -599,7 +519,7 @@ function getResourceStatusClass($status)
             <i class="fa-solid fa-house-chimney"></i> Find Shelter
         </a>
 
-        <a href="resources.php" class="nav-link active">
+        <a href="resources.php" class="nav-link">
             <i class="fa-solid fa-boxes-stacked"></i> Resources
         </a>
 
@@ -609,21 +529,15 @@ function getResourceStatusClass($status)
             <i class="fa-solid fa-person-walking-arrow-right"></i> Evacuation Status
         </a>
 
-        <a href="request_help.php" class="nav-link">
+        <a href="chatbot.php" class="nav-link">
             <i class="fa-solid fa-hand-holding-heart"></i> Request Help
         </a>
     </nav>
 
     <div class="sidebar-footer">
-        <?php if ($is_guest): ?>
-        <a href="login.php" class="nav-link logout">
-            <i class="fa-solid fa-right-to-bracket"></i> Login
-        </a>
-        <?php else: ?>
         <a href="logout.php" class="nav-link logout">
             <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
         </a>
-        <?php endif; ?>
     </div>
 </aside>
 
@@ -635,7 +549,7 @@ function getResourceStatusClass($status)
             </button>
 
             <div class="topbar-title">
-                <h1>Resources</h1>
+                <h1>Missing Student Alerts</h1>
                 <p><?php echo date('l, F j, Y'); ?></p>
             </div>
         </div>
@@ -665,79 +579,57 @@ function getResourceStatusClass($status)
     <main class="content">
         <div class="page-head">
             <h2>
-                <span class="ph-icon"><i class="fa-solid fa-boxes-stacked"></i></span>
-                Emergency Resources
+                <span class="ph-icon"><i class="fa-solid fa-user-magnifying-glass"></i></span>
+                Missing Student Alerts
             </h2>
-            <a href="dashboard.php" class="back-btn">
-                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
-            </a>
+            <div class="head-actions">
+                <a href="missing_students.php?view=active" class="tab-btn <?php echo $view === 'active' ? 'active' : ''; ?>">
+                    Active Alerts
+                </a>
+                <a href="missing_students.php?view=history" class="tab-btn <?php echo $view === 'history' ? 'active' : ''; ?>">
+                    History (Found)
+                </a>
+                <a href="report_missing_student.php" class="cta-btn">
+                    <i class="fa-solid fa-circle-plus"></i> Report Missing Student
+                </a>
+            </div>
         </div>
 
-        <?php if ($result && $result->num_rows > 0): ?>
-            <div class="resources-grid">
-                <?php while ($row = $result->fetch_assoc()): ?>
-                    <?php
-                        $resIcon = getResourceIcon($row['resource_type']);
-                        $statusClass = getResourceStatusClass($row['status']);
-                    ?>
-                    <div class="resource-card">
-                        <div class="resource-head">
-                            <div class="resource-name">
-                                <span class="rs-ico"><i class="<?php echo $resIcon; ?>"></i></span>
-                                <span class="rn-text">
-                                    <?php echo htmlspecialchars($row['resource_name']); ?>
-                                    <small><?php echo htmlspecialchars($row['resource_type']); ?></small>
-                                </span>
-                            </div>
-                            <span class="status-badge <?php echo $statusClass; ?>">
-                                <?php echo htmlspecialchars($row['status']); ?>
-                            </span>
-                        </div>
-
-                        <div class="resource-info">
-                            <div class="info-row">
-                                <i class="fa-solid fa-ruler"></i>
-                                <span class="label">Unit</span>
-                                <span class="value"><?php echo htmlspecialchars($row['unit']); ?></span>
-                            </div>
-
-                            <div class="info-row">
-                                <i class="fa-solid fa-clock-rotate-left"></i>
-                                <span class="label">Updated At</span>
-                                <span class="value"><?php echo htmlspecialchars($row['updated_at']); ?></span>
-                            </div>
-
-                            <div class="info-row">
-                                <i class="fa-solid fa-hashtag"></i>
-                                <span class="label">Resource ID</span>
-                                <span class="value">#<?php echo (int)$row['id']; ?></span>
-                            </div>
-                        </div>
-
-                        <span class="qty-pill">
-                            <i class="fa-solid fa-cubes-stacked"></i>
-                            <?php echo htmlspecialchars($row['quantity']); ?> <?php echo htmlspecialchars($row['unit']); ?>
-                        </span>
-
-                        <?php if ($can_manage): ?>
-                            <div class="card-actions">
-                                <a href="edit_resource.php?id=<?php echo (int)$row['id']; ?>" class="btn-edit">
-                                    <i class="fa-solid fa-pen"></i> Edit
-                                </a>
-                                <a href="delete_resource.php?id=<?php echo (int)$row['id']; ?>"
-                                   class="btn-del"
-                                   onclick="return confirm('Are you sure you want to delete this resource?');">
-                                    <i class="fa-solid fa-trash"></i> Delete
-                                </a>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                <?php endwhile; ?>
+        <?php if (empty($reports)): ?>
+            <div class="empty-state">
+                <i class="fa-solid <?php echo $view === 'history' ? 'fa-circle-check' : 'fa-user-magnifying-glass'; ?>"></i>
+                <p><?php echo $view === 'history' ? 'No students found and resolved yet.' : 'No active missing student alerts right now.'; ?></p>
             </div>
         <?php else: ?>
-            <div class="empty-state">
-                <i class="fa-solid fa-box-open"></i>
-                <p>No resources found.</p>
+            <div class="grid">
+                <?php foreach ($reports as $r): ?>
+                    <a href="view_missing_student.php?id=<?php echo (int)$r['id']; ?>" class="card <?php echo $view === 'history' ? 'history' : ''; ?>">
+                        <div class="card-top">
+                            <div class="card-avatar"><?php echo strtoupper(substr($r['student_name'], 0, 1)); ?></div>
+                            <div>
+                                <div class="card-name"><?php echo e($r['student_name']); ?></div>
+                                <div class="card-sub">
+                                    <?php echo $r['age'] ? e($r['age']) . ' yrs' : 'Age unknown'; ?>
+                                    <?php if (!empty($r['gender'])): ?> · <?php echo e(ucfirst($r['gender'])); ?><?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="card-row">
+                                <i class="fa-solid fa-location-dot"></i>
+                                <span>Last seen: <?php echo e($r['last_seen_location']); ?></span>
+                            </div>
+                            <div class="card-row">
+                                <i class="fa-solid fa-clock"></i>
+                                <span><?php echo e(date('M j, Y · H:i', strtotime($r['last_seen_at']))); ?></span>
+                            </div>
+                            <span class="status-pill">
+                                <i class="fa-solid <?php echo $view === 'history' ? 'fa-circle-check' : 'fa-triangle-exclamation'; ?>"></i>
+                                <?php echo $view === 'history' ? 'Found' : 'Missing'; ?>
+                            </span>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
             </div>
         <?php endif; ?>
     </main>

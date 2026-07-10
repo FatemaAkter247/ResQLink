@@ -479,6 +479,12 @@ $result = $conn->query("SELECT * FROM shelters ORDER BY id DESC");
             <i class="fa-solid fa-circle-plus"></i> Create Alert
         </a>
 
+        <span class="nav-label">Missing Students</span>
+
+        <a href="missing_student_reports.php" class="nav-link">
+            <i class="fa-solid fa-user-magnifying-glass"></i> Missing Student Reports
+        </a>
+
         <span class="nav-label">Management</span>
 
         <a href="manage_shelters.php" class="nav-link active">
