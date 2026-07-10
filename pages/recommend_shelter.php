@@ -2,10 +2,8 @@
 session_start();
 require_once '../DB/db.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit();
-}
+// Public emergency feature: getting a shelter recommendation must NOT require
+// login. No per-user data is read or written here, so guests are fully supported.
 
 $recommendations = [];
 $error = "";

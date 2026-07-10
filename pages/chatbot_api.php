@@ -2,9 +2,10 @@
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 
-if (!isset($_SESSION['user_id'])) {
-    respond(false, 'Please login first.');
-}
+// NOTE: Emergency reporting is intentionally available WITHOUT login. The user
+// (logged-in or anonymous) is resolved into $userId further below, after the DB
+// connection is available. Anonymous reporters are attributed to a shared Guest
+// account so the emergency request can still be stored.
 
 require_once __DIR__ . '/../DB/db.php';
 require_once __DIR__ . '/../config/ai_config.php';
@@ -36,7 +37,18 @@ if (mb_strlen($message, 'UTF-8') > 1000) {
 
 rateLimit();
 
-$userId = (int)$_SESSION['user_id'];
+// Resolve who this emergency report belongs to. Logged-in users are attributed
+// to their own account; anonymous reporters are attributed to the shared Guest
+// account, which satisfies the NOT NULL foreign keys on
+// emergency_requests.created_by and chatbot_messages.user_id.
+if (isset($_SESSION['user_id'])) {
+    $userId = (int)$_SESSION['user_id'];
+} else {
+    $userId = getGuestUserId($conn);
+    if ($userId <= 0) {
+        respond(false, 'Emergency service is temporarily unavailable. If this is life-threatening, call your local emergency hotline now.');
+    }
+}
 
 try {
     $context = getSystemContext($conn);
@@ -238,6 +250,66 @@ function getRows(mysqli $conn, string $sql): array
     }
 
     return $rows;
+}
+
+/**
+ * Return the id of the shared "Guest" account used for anonymous emergency
+ * reports, creating it on first use. It is a plain citizen (role_id = 1) with an
+ * unusable random password, so nobody can actually log in as "Guest". Idempotent:
+ * the unique `phone` value guarantees only one Guest row ever exists.
+ */
+function getGuestUserId(mysqli $conn): int
+{
+    $guestPhone = 'GUEST';
+
+    $sel = $conn->prepare("SELECT id FROM users WHERE phone = ? LIMIT 1");
+    if ($sel) {
+        $sel->bind_param('s', $guestPhone);
+        if ($sel->execute()) {
+            $row = $sel->get_result()->fetch_assoc();
+            if ($row) {
+                $sel->close();
+                return (int)$row['id'];
+            }
+        }
+        $sel->close();
+    }
+
+    // Not seeded yet — create it lazily.
+    $roleId   = 1; // citizen
+    $fullName = 'Guest (Anonymous)';
+    $email    = 'guest@resqlink.local';
+    $pwHash   = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT); // unusable
+
+    $ins = $conn->prepare(
+        "INSERT INTO users (role_id, full_name, phone, email, password_hash)
+         VALUES (?, ?, ?, ?, ?)"
+    );
+    if ($ins) {
+        $ins->bind_param('issss', $roleId, $fullName, $guestPhone, $email, $pwHash);
+        if ($ins->execute()) {
+            $id = (int)$conn->insert_id;
+            $ins->close();
+            return $id;
+        }
+        $ins->close();
+    }
+
+    // Fallback for a race (another request created it first): re-select.
+    $sel2 = $conn->prepare("SELECT id FROM users WHERE phone = ? LIMIT 1");
+    if ($sel2) {
+        $sel2->bind_param('s', $guestPhone);
+        if ($sel2->execute()) {
+            $row = $sel2->get_result()->fetch_assoc();
+            if ($row) {
+                $sel2->close();
+                return (int)$row['id'];
+            }
+        }
+        $sel2->close();
+    }
+
+    return 0;
 }
 
 function createEmergencyRequest(

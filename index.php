@@ -28,6 +28,19 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#about">About</a>
                     </li>
+                    <!-- Public emergency features — usable without login -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/shelters.php">Find Shelter</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/resources.php">Resources</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/recommend_shelter.php">Shelter Recommendation</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/chatbot.php">Chatbot</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="pages/login.php">Login</a>
                     </li>

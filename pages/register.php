@@ -116,11 +116,9 @@
                 <div class="mb-3">
                     <label for="role" class="form-label">User Role</label>
                     <select class="form-select" id="role" name="role_id" required>
-                        <option value="">-- Select Role --</option>
-                        <option value="1">Citizen</option>
-                        <option value="3">Rescue Team</option>
-                        <option value="2">Administrator</option>
+                        <option value="1" selected>Citizen</option>
                     </select>
+                    <small class="text-muted">Public registration creates a Citizen account. Administrator and Rescue Team accounts are provisioned separately by the authorities.</small>
                 </div>
 
                 <div class="mb-3">

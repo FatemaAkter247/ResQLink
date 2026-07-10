@@ -1,10 +1,10 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit();
-}
+// Public emergency feature: requesting help must NOT require login. Anonymous
+// visitors can use the chatbot; their reports are attributed to a shared Guest
+// account inside chatbot_api.php. Logged-in users keep their personalised shell.
+$is_guest = !isset($_SESSION['user_id']);
 
 require_once __DIR__ . "/../DB/db.php";
 
@@ -13,7 +13,7 @@ if (empty($_SESSION['chatbot_csrf'])) {
 }
 
 $user_id = (int)($_SESSION['user_id'] ?? 0);
-$username_raw = $_SESSION['full_name'] ?? 'User';
+$username_raw = $_SESSION['full_name'] ?? 'Guest';
 $username = htmlspecialchars($username_raw, ENT_QUOTES, 'UTF-8');
 $roleId = (int)($_SESSION['role_id'] ?? 1);
 $initials = strtoupper(substr($username_raw, 0, 1));
@@ -582,9 +582,15 @@ if (isset($conn) && $conn) {
     </nav>
 
     <div class="sidebar-footer">
+        <?php if ($is_guest): ?>
+        <a href="login.php" class="nav-link logout">
+            <i class="fa-solid fa-right-to-bracket"></i> Login
+        </a>
+        <?php else: ?>
         <a href="logout.php" class="nav-link logout">
             <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
         </a>
+        <?php endif; ?>
     </div>
 </aside>
 

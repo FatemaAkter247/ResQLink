@@ -14,7 +14,17 @@ $full_name = trim($first_name . ' ' . $last_name);
 $email = trim($_POST['email'] ?? '');
 $phone = trim($_POST['phone'] ?? '');
 $address = trim($_POST['address'] ?? '');
-$role_id = (int)($_POST['role_id'] ?? 0);
+
+/*
+    SECURITY: Public self-registration may ONLY create Citizen accounts.
+    Any client-submitted role_id is deliberately ignored to prevent privilege
+    escalation (e.g. a user posting role_id=2 to become an admin). Privileged
+    roles (admin, rescue_team, government, system_admin) must be created through
+    a secure path — seeded directly in the database or by an existing admin from
+    a protected panel — never from this public form.
+*/
+$role_id = 1; // 1 = citizen (see `roles` table)
+
 $password = $_POST['password'] ?? '';
 $confirm_password = $_POST['confirm_password'] ?? '';
 
