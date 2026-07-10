@@ -11,78 +11,98 @@ $user_id = (int) $_SESSION['user_id'];
 $success = "";
 $error = "";
 
-// shelters for dropdown
-$shelters = $conn->query("
-    SELECT id, shelter_name, address, city, total_capacity, current_occupancy, status
-    FROM shelters
-    WHERE status IN ('open', 'full')
-    ORDER BY shelter_name ASC
-");
-
-// latest status for this user
-$currentStatus = null;
-$stmt = $conn->prepare("
-    SELECT es.*, s.shelter_name, s.address, s.city
-    FROM evacuation_status es
-    LEFT JOIN shelters s ON es.shelter_id = s.id
-    WHERE es.user_id = ?
-    ORDER BY es.id DESC
-    LIMIT 1
-");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$res = $stmt->get_result();
-if ($res && $res->num_rows > 0) {
-    $currentStatus = $res->fetch_assoc();
+function e($value)
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
-$stmt->close();
+
+function requestStatusClass($status)
+{
+    switch ($status) {
+        case 'assigned':
+            return 'st-assigned';
+        case 'resolved':
+            return 'st-resolved';
+        case 'cancelled':
+            return 'st-cancelled';
+        default:
+            return 'st-pending';
+    }
+}
+
+function requestPriorityClass($priority)
+{
+    switch ($priority) {
+        case 'critical':
+            return 'pr-critical';
+        case 'high':
+            return 'pr-high';
+        case 'medium':
+            return 'pr-medium';
+        default:
+            return 'pr-low';
+    }
+}
+
+$typeLabels = [
+    'medical' => 'Medical / Injury / Illness',
+    'rescue'  => 'Trapped / Need Rescue',
+    'other'   => 'Other Campus Emergency',
+];
 
 // submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $status = trim($_POST['status'] ?? '');
-    $notes = trim($_POST['notes'] ?? '');
-    $shelter_id = $_POST['shelter_id'] ?? '';
+    $type = trim($_POST['emergency_type'] ?? '');
+    $address = trim($_POST['address'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $lifeThreatening = isset($_POST['life_threatening']);
 
-    $allowed = ['safe', 'evacuated', 'need_help'];
+    $allowedTypes = ['medical', 'rescue', 'other'];
 
-    if (!in_array($status, $allowed, true)) {
-        $error = "Please select a valid status.";
-    } elseif ($status === 'evacuated' && $shelter_id === '') {
-        $error = "Please select a shelter if you are evacuated.";
+    if (!in_array($type, $allowedTypes, true)) {
+        $error = "Please select a valid emergency type.";
+    } elseif ($address === '' || $description === '') {
+        $error = "Please describe what happened and your exact location on campus.";
     } else {
-        $shelter_value = ($shelter_id === '') ? null : (int)$shelter_id;
-
-        $insert = $conn->prepare("
-            INSERT INTO evacuation_status (user_id, status, shelter_id, notes, updated_at)
-            VALUES (?, ?, ?, ?, NOW())
-        ");
-        $insert->bind_param("isis", $user_id, $status, $shelter_value, $notes);
-
-        if ($insert->execute()) {
-            $success = "Evacuation status saved successfully.";
+        if ($lifeThreatening) {
+            $priority = 'critical';
+        } elseif ($type === 'other') {
+            $priority = 'medium';
         } else {
-            $error = "Failed to save evacuation status.";
+            $priority = 'high';
         }
-        $insert->close();
 
-        // reload latest
         $stmt = $conn->prepare("
-            SELECT es.*, s.shelter_name, s.address, s.city
-            FROM evacuation_status es
-            LEFT JOIN shelters s ON es.shelter_id = s.id
-            WHERE es.user_id = ?
-            ORDER BY es.id DESC
-            LIMIT 1
+            INSERT INTO emergency_requests (created_by, request_type, description, address, priority, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', NOW())
         ");
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        if ($res && $res->num_rows > 0) {
-            $currentStatus = $res->fetch_assoc();
+        $stmt->bind_param("issss", $user_id, $type, $description, $address, $priority);
+
+        if ($stmt->execute()) {
+            $success = "Your emergency request has been sent. The nearest available rescue team will be notified immediately.";
+        } else {
+            $error = "Failed to send your request. If this is urgent, call 999 immediately.";
         }
         $stmt->close();
     }
 }
+
+// this user's recent requests
+$myRequests = [];
+$stmt = $conn->prepare("
+    SELECT id, request_type, description, address, priority, status, created_at
+    FROM emergency_requests
+    WHERE created_by = ?
+    ORDER BY created_at DESC
+    LIMIT 5
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$res = $stmt->get_result();
+while ($row = $res->fetch_assoc()) {
+    $myRequests[] = $row;
+}
+$stmt->close();
 
 // Session/user info for dashboard shell
 $username_raw = $_SESSION['full_name'] ?? 'User';
@@ -113,24 +133,14 @@ $initials = strtoupper(substr($username_raw, 0, 1));
 
 // Unread alerts count for sidebar badge
 $unread_count = 0;
-$uc = $conn->query("SELECT COUNT(*) AS c FROM alert_notifications WHERE user_id = $user_id AND is_read = 0");
-if ($uc && $ucr = $uc->fetch_assoc()) {
+$uc = $conn->prepare("SELECT COUNT(*) AS c FROM alert_notifications WHERE user_id = ? AND is_read = 0");
+$uc->bind_param("i", $user_id);
+$uc->execute();
+$ucRes = $uc->get_result();
+if ($ucRes && $ucr = $ucRes->fetch_assoc()) {
     $unread_count = (int)$ucr['c'];
 }
-
-// Status pill styling helper for the "Latest Status" panel
-function evacStatusClass($status)
-{
-    $s = strtolower(trim($status));
-    if ($s === 'safe') {
-        return 'ev-safe';
-    } elseif ($s === 'evacuated') {
-        return 'ev-evac';
-    } elseif ($s === 'need_help') {
-        return 'ev-help';
-    }
-    return 'ev-default';
-}
+$uc->close();
 ?>
 
 <!DOCTYPE html>
@@ -138,7 +148,7 @@ function evacStatusClass($status)
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evacuation Status - ResQLink</title>
+    <title>Report Emergency - ResQLink</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -155,6 +165,8 @@ function evacStatusClass($status)
             --accent: #2e7d32;
             --accent-dark: #1b5e20;
             --accent-light: #e8f5e9;
+            --danger: #dc2626;
+            --danger-dark: #b91c1c;
             --sidebar-width: 265px;
             --bg: #f0f2f5;
             --white: #ffffff;
@@ -383,7 +395,7 @@ function evacStatusClass($status)
             width: 40px;
             height: 40px;
             border-radius: 12px;
-            background: var(--accent);
+            background: var(--danger);
             color: #fff;
             display: grid;
             place-items: center;
@@ -410,8 +422,41 @@ function evacStatusClass($status)
             border-color: var(--accent);
         }
 
+        /* ---------- Call bar ---------- */
+        .call-bar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .call-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px;
+            border-radius: var(--radius);
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 15px;
+            color: #fff;
+            background: var(--danger);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+        }
+
+        .call-btn i { font-size: 18px; }
+
+        .call-btn:hover { background: var(--danger-dark); color: #fff; }
+
+        .call-btn.secondary {
+            background: #1f2937;
+        }
+
+        .call-btn.secondary:hover { background: #111827; }
+
         /* ---------- Layout grid ---------- */
-        .evac-grid {
+        .sos-grid {
             display: grid;
             grid-template-columns: 1.1fr 1fr;
             gap: 20px;
@@ -439,8 +484,8 @@ function evacStatusClass($status)
             width: 34px;
             height: 34px;
             border-radius: 10px;
-            background: var(--accent-light);
-            color: var(--accent);
+            background: #fef2f2;
+            color: var(--danger);
             display: grid;
             place-items: center;
             font-size: 14px;
@@ -476,65 +521,6 @@ function evacStatusClass($status)
             border: 1px solid #fecaca;
         }
 
-        /* ---------- Latest status panel ---------- */
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            border-radius: 30px;
-            font-size: 13px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-            color: #fff;
-            margin-bottom: 18px;
-        }
-
-        .ev-safe { background: #15803d; }
-        .ev-evac { background: #2563eb; }
-        .ev-help { background: #b91c1c; }
-        .ev-default { background: #6b7280; }
-
-        .status-info {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .status-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            font-size: 13px;
-        }
-
-        .status-row i {
-            width: 30px;
-            height: 30px;
-            border-radius: 8px;
-            background: #f3f4f6;
-            color: var(--muted);
-            display: grid;
-            place-items: center;
-            flex-shrink: 0;
-        }
-
-        .status-row .label { color: var(--muted); font-weight: 600; min-width: 70px; }
-        .status-row .value { font-weight: 700; }
-
-        .no-status {
-            text-align: center;
-            color: var(--muted);
-            padding: 20px 0;
-        }
-
-        .no-status i {
-            font-size: 36px;
-            color: var(--accent);
-            margin-bottom: 10px;
-        }
-
         /* ---------- Form ---------- */
         .form-label {
             font-size: 13px;
@@ -554,36 +540,122 @@ function evacStatusClass($status)
 
         .form-select:focus,
         .form-control:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.20);
-        }
-
-        .form-text {
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: 5px;
+            border-color: var(--danger);
+            box-shadow: 0 0 0 0.2rem rgba(220, 38, 38, 0.15);
         }
 
         .mb-3 { margin-bottom: 18px; }
 
-        .btn-save {
+        .life-check {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+        }
+
+        .life-check input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--danger);
+        }
+
+        .life-check label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--danger-dark);
+        }
+
+        .btn-sos {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
-            padding: 11px 22px;
+            width: 100%;
+            padding: 13px 22px;
             border-radius: 10px;
-            background: var(--accent);
+            background: var(--danger);
             color: #fff;
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 15px;
+            font-weight: 800;
             border: none;
             cursor: pointer;
             transition: all .2s ease;
         }
 
-        .btn-save:hover {
-            background: var(--accent-dark);
+        .btn-sos:hover {
+            background: var(--danger-dark);
             transform: translateY(-2px);
+        }
+
+        /* ---------- Recent requests ---------- */
+        .req-item {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+        }
+
+        .req-item:last-child { margin-bottom: 0; }
+
+        .req-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .req-type { font-size: 14px; font-weight: 800; }
+
+        .req-desc {
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .req-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            color: #fff;
+        }
+
+        .st-pending { background: #ca8a04; }
+        .st-assigned { background: #2563eb; }
+        .st-resolved { background: #15803d; }
+        .st-cancelled { background: #6b7280; }
+
+        .pr-critical { background: #b91c1c; }
+        .pr-high { background: #ea580c; }
+        .pr-medium { background: #ca8a04; }
+        .pr-low { background: #15803d; }
+
+        .no-req {
+            text-align: center;
+            color: var(--muted);
+            padding: 20px 0;
+        }
+
+        .no-req i {
+            font-size: 36px;
+            color: var(--danger);
+            margin-bottom: 10px;
         }
 
         /* ---------- Sidebar overlay (mobile) ---------- */
@@ -598,7 +670,8 @@ function evacStatusClass($status)
         .sidebar-overlay.open { display: block; }
 
         @media (max-width: 900px) {
-            .evac-grid { grid-template-columns: 1fr; }
+            .sos-grid { grid-template-columns: 1fr; }
+            .call-bar { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 800px) {
@@ -636,7 +709,7 @@ function evacStatusClass($status)
             <i class="fa-solid fa-robot"></i> AI Emergency Chatbot
         </a>
 
-        <a href="report_emergency.php" class="nav-link">
+        <a href="report_emergency.php" class="nav-link active">
             <i class="fa-solid fa-truck-medical" style="color:#dc2626;"></i> Report Emergency
         </a>
 
@@ -659,7 +732,7 @@ function evacStatusClass($status)
 
         <span class="nav-label">My Status</span>
 
-        <a href="evacuation_status.php" class="nav-link active">
+        <a href="evacuation_status.php" class="nav-link">
             <i class="fa-solid fa-person-walking-arrow-right"></i> Evacuation Status
         </a>
 
@@ -683,7 +756,7 @@ function evacStatusClass($status)
             </button>
 
             <div class="topbar-title">
-                <h1>Evacuation Status</h1>
+                <h1>Report Emergency</h1>
                 <p><?php echo date('l, F j, Y'); ?></p>
             </div>
         </div>
@@ -713,11 +786,20 @@ function evacStatusClass($status)
     <main class="content">
         <div class="page-head">
             <h2>
-                <span class="ph-icon"><i class="fa-solid fa-person-walking-arrow-right"></i></span>
-                Evacuation Status Tracking
+                <span class="ph-icon"><i class="fa-solid fa-truck-medical"></i></span>
+                Campus Emergency SOS
             </h2>
             <a href="dashboard.php" class="back-btn">
                 <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <div class="call-bar">
+            <a class="call-btn" href="tel:999">
+                <i class="fa-solid fa-phone"></i> Call 999 (Emergency Hotline)
+            </a>
+            <a class="call-btn secondary" href="tel:+8800000000">
+                <i class="fa-solid fa-phone-volume"></i> Call Campus Security (placeholder number)
             </a>
         </div>
 
@@ -733,107 +815,82 @@ function evacStatusClass($status)
             </div>
         <?php endif; ?>
 
-        <div class="evac-grid">
-            <!-- LEFT: Update form -->
+        <div class="sos-grid">
+            <!-- LEFT: Report form -->
             <div class="panel">
                 <div class="panel-title">
-                    <span class="pt-ico"><i class="fa-solid fa-pen-to-square"></i></span>
-                    Update Your Status
+                    <span class="pt-ico"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                    Send an SOS Request
                 </div>
-                <p class="panel-sub">Update your current situation during an emergency.</p>
+                <p class="panel-sub">
+                    For immediate life danger, call 999 first. This form also alerts the on-duty campus rescue team so help can be dispatched to your exact location.
+                </p>
 
                 <form method="POST">
                     <div class="mb-3">
-                        <label class="form-label">Select Status</label>
-                        <select name="status" id="statusSelect" class="form-select w-100" required>
-                            <option value="">Choose status</option>
-                            <option value="safe">Safe</option>
-                            <option value="evacuated">Evacuated</option>
-                            <option value="need_help">Need Help</option>
+                        <label class="form-label">Emergency Type</label>
+                        <select name="emergency_type" class="form-select w-100" required>
+                            <option value="">Choose type</option>
+                            <?php foreach ($typeLabels as $value => $label): ?>
+                                <option value="<?php echo e($value); ?>"><?php echo e($label); ?></option>
+                            <?php endforeach; ?>
                         </select>
-                    </div>
-
-                    <div class="mb-3" id="shelterWrap">
-                        <label class="form-label">Select Shelter</label>
-                        <select name="shelter_id" class="form-select w-100">
-                            <option value="">No shelter selected</option>
-                            <?php if ($shelters): ?>
-                                <?php while ($shelter = $shelters->fetch_assoc()): ?>
-                                    <?php
-                                    $available = (int)$shelter['total_capacity'] - (int)$shelter['current_occupancy'];
-                                    if ($available < 0) $available = 0;
-                                    ?>
-                                    <option value="<?php echo (int)$shelter['id']; ?>">
-                                        <?php echo htmlspecialchars($shelter['shelter_name'] . " - " . $shelter['city'] . " - Available: " . $available); ?>
-                                    </option>
-                                <?php endwhile; ?>
-                            <?php endif; ?>
-                        </select>
-                        <div class="form-text">Select a shelter only if you are evacuated.</div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control w-100" rows="4" placeholder="Add any extra details..."></textarea>
+                        <label class="form-label">Exact Location on Campus</label>
+                        <input type="text" name="address" class="form-control w-100" required
+                               placeholder="e.g. Library 2nd Floor, Block C, near Room 305">
                     </div>
 
-                    <button type="submit" class="btn-save">
-                        <i class="fa-solid fa-floppy-disk"></i> Save Status
+                    <div class="mb-3">
+                        <label class="form-label">What's happening?</label>
+                        <textarea name="description" class="form-control w-100" rows="4" required
+                                  placeholder="Briefly describe the injury/illness or situation..."></textarea>
+                    </div>
+
+                    <div class="mb-3 life-check">
+                        <input type="checkbox" name="life_threatening" id="lifeThreatening" value="1">
+                        <label for="lifeThreatening">This is life-threatening / needs help right now</label>
+                    </div>
+
+                    <button type="submit" class="btn-sos">
+                        <i class="fa-solid fa-paper-plane"></i> Send SOS Request
                     </button>
                 </form>
             </div>
 
-            <!-- RIGHT: Latest status -->
+            <!-- RIGHT: Recent requests -->
             <div class="panel">
                 <div class="panel-title">
                     <span class="pt-ico"><i class="fa-solid fa-clock-rotate-left"></i></span>
-                    Latest Status
+                    My Recent Requests
                 </div>
-                <p class="panel-sub">Your most recent evacuation update.</p>
+                <p class="panel-sub">Status of the emergency requests you've sent.</p>
 
-                <?php if ($currentStatus): ?>
-                    <span class="status-pill <?php echo evacStatusClass($currentStatus['status']); ?>">
-                        <i class="fa-solid fa-circle-dot"></i>
-                        <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $currentStatus['status']))); ?>
-                    </span>
-
-                    <div class="status-info">
-                        <?php if (!empty($currentStatus['shelter_name'])): ?>
-                            <div class="status-row">
-                                <i class="fa-solid fa-house-chimney"></i>
-                                <span class="label">Shelter</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['shelter_name']); ?></span>
+                <?php if (!empty($myRequests)): ?>
+                    <?php foreach ($myRequests as $req): ?>
+                        <div class="req-item">
+                            <div class="req-head">
+                                <span class="req-type"><?php echo e($typeLabels[$req['request_type']] ?? ucfirst($req['request_type'])); ?></span>
+                                <span class="pill <?php echo requestStatusClass($req['status']); ?>">
+                                    <?php echo e(ucfirst($req['status'])); ?>
+                                </span>
                             </div>
-                            <div class="status-row">
-                                <i class="fa-solid fa-location-dot"></i>
-                                <span class="label">Address</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['address']); ?></span>
+                            <div class="req-desc"><?php echo e($req['description']); ?></div>
+                            <div class="req-meta">
+                                <span><i class="fa-solid fa-location-dot"></i> <?php echo e($req['address']); ?></span>
+                                <span class="pill <?php echo requestPriorityClass($req['priority']); ?>">
+                                    <?php echo e(ucfirst($req['priority'])); ?>
+                                </span>
+                                <span><?php echo e($req['created_at']); ?></span>
                             </div>
-                            <div class="status-row">
-                                <i class="fa-solid fa-city"></i>
-                                <span class="label">City</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['city'] ?? 'N/A'); ?></span>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($currentStatus['notes'])): ?>
-                            <div class="status-row">
-                                <i class="fa-solid fa-note-sticky"></i>
-                                <span class="label">Notes</span>
-                                <span class="value"><?php echo htmlspecialchars($currentStatus['notes']); ?></span>
-                            </div>
-                        <?php endif; ?>
-
-                        <div class="status-row">
-                            <i class="fa-solid fa-clock"></i>
-                            <span class="label">Updated</span>
-                            <span class="value"><?php echo htmlspecialchars($currentStatus['updated_at']); ?></span>
                         </div>
-                    </div>
+                    <?php endforeach; ?>
                 <?php else: ?>
-                    <div class="no-status">
-                        <i class="fa-solid fa-circle-question"></i>
-                        <p>No status set yet. Update your status using the form.</p>
+                    <div class="no-req">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <p>No emergency requests sent yet.</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -842,15 +899,6 @@ function evacStatusClass($status)
 </div>
 
 <script>
-const statusSelect = document.getElementById('statusSelect');
-const shelterWrap = document.getElementById('shelterWrap');
-
-function toggleShelterField() {
-    shelterWrap.style.display = statusSelect.value === 'evacuated' ? 'block' : 'none';
-}
-toggleShelterField();
-statusSelect.addEventListener('change', toggleShelterField);
-
 function openSidebar() {
     document.getElementById('sidebar').classList.add('open');
     document.getElementById('overlay').classList.add('open');

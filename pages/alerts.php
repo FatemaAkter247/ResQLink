@@ -558,6 +558,10 @@ function getSeverityClass($severity)
             <i class="fa-solid fa-robot"></i> AI Emergency Chatbot
         </a>
 
+        <a href="report_emergency.php" class="nav-link">
+            <i class="fa-solid fa-truck-medical" style="color:#dc2626;"></i> Report Emergency
+        </a>
+
         <span class="nav-label">Disaster Info</span>
 
         <a href="alerts.php" class="nav-link active">

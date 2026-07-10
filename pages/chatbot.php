@@ -486,6 +486,21 @@ if (isset($conn) && $conn) {
 
         .call-999:hover { background: #b91c1c; color: #fff; }
 
+        .call-security {
+            display: block;
+            text-align: center;
+            padding: 14px;
+            text-decoration: none;
+            color: #fff;
+            background: #1f2937;
+            font-weight: 800;
+            border-radius: var(--radius);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+            margin-top: 10px;
+        }
+
+        .call-security:hover { background: #111827; color: #fff; }
+
         /* ---------- Typing ---------- */
         .typing-dots { display: inline-flex; gap: 4px; }
 
@@ -551,6 +566,10 @@ if (isset($conn) && $conn) {
 
         <a href="chatbot.php" class="nav-link">
             <i class="fa-solid fa-robot"></i> AI Emergency Chatbot
+        </a>
+
+        <a href="report_emergency.php" class="nav-link">
+            <i class="fa-solid fa-truck-medical" style="color:#dc2626;"></i> Report Emergency
         </a>
 
         <span class="nav-label">Disaster Info</span>
@@ -708,6 +727,10 @@ if (isset($conn) && $conn) {
 
                 <a class="call-999" href="tel:999">
                     <i class="fa-solid fa-phone"></i> Call 999
+                </a>
+
+                <a class="call-security" href="tel:+8800000000">
+                    <i class="fa-solid fa-phone-volume"></i> Call Campus Security
                 </a>
             </aside>
         </div>

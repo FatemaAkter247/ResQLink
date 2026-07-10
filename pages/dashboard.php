@@ -897,6 +897,10 @@ a {
             <i class="fa-solid fa-robot"></i> AI Emergency Chatbot
         </a>
 
+        <a href="report_emergency.php" class="nav-link">
+            <i class="fa-solid fa-truck-medical" style="color:#dc2626;"></i> Report Emergency
+        </a>
+
         <?php if ($role === 'admin' || $role === 'system_admin'): ?>
             <span class="nav-label">Alerts</span>
 
@@ -1160,6 +1164,13 @@ a {
                     <span>AI Chatbot</span>
                 </a>
 
+                <a href="report_emergency.php" class="action-card">
+                    <div class="ac-icon" style="background:#dc2626;">
+                        <i class="fa-solid fa-truck-medical"></i>
+                    </div>
+                    <span>Report Emergency</span>
+                </a>
+
                 <a href="alerts.php" class="action-card">
                     <div class="ac-icon" style="background:#c62828;">
                         <i class="fa-solid fa-bell"></i>
@@ -1308,6 +1319,13 @@ a {
                         <i class="fa-solid fa-robot"></i>
                     </div>
                     <span>AI Chatbot</span>
+                </a>
+
+                <a href="report_emergency.php" class="action-card">
+                    <div class="ac-icon" style="background:#dc2626;">
+                        <i class="fa-solid fa-truck-medical"></i>
+                    </div>
+                    <span>Report Emergency</span>
                 </a>
 
                 <a href="alerts.php" class="action-card">
@@ -1499,6 +1517,13 @@ a {
                         <i class="fa-solid fa-robot"></i>
                     </div>
                     <span>AI Chatbot</span>
+                </a>
+
+                <a href="report_emergency.php" class="action-card">
+                    <div class="ac-icon" style="background:#dc2626;">
+                        <i class="fa-solid fa-truck-medical"></i>
+                    </div>
+                    <span>Report Emergency</span>
                 </a>
 
                 <a href="alerts.php" class="action-card">
