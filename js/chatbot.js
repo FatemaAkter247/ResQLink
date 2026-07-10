@@ -9,6 +9,15 @@
         chatWindow.scrollTop = chatWindow.scrollHeight;
     }
 
+    function formatBotText(text) {
+        // Put each numbered step on its own line, even if the model returned
+        // them inline (e.g. "1. ... 2. ..."). Plain-text only, no HTML.
+        return String(text)
+            .replace(/\s*(\d{1,2})\.\s+/g, '\n$1. ')
+            .replace(/^\s+/, '')
+            .trim();
+    }
+
     function addMessage(type, text) {
         const row = document.createElement('div');
         row.className = 'message ' + type;
@@ -22,7 +31,7 @@
 
         const bubble = document.createElement('div');
         bubble.className = 'message-bubble';
-        bubble.textContent = text;
+        bubble.textContent = type === 'bot' ? formatBotText(text) : text;
         row.appendChild(bubble);
 
         chatWindow.appendChild(row);

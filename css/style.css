@@ -3,9 +3,9 @@
    ========================================== */
 
 :root {
-    --primary-color: #dc3545;
+    --primary-color: #c62828;
     --secondary-color: #343a40;
-    --light-color: #f8f9fa;
+    --light-color: #ffebee;
     --text-dark: #333333;
     --border-color: #dee2e6;
     --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -26,6 +26,7 @@ body {
     color: var(--text-dark);
     line-height: 1.6;
     overflow-x: hidden;
+    background-color: #fff5f5;
 }
 
 html {
@@ -78,7 +79,7 @@ html {
    ========================================== */
 
 .hero-section {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #bb2d3b 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, #8e0000 100%);
     color: white;
     padding: 120px 0;
     min-height: 100vh;
@@ -220,7 +221,7 @@ html {
 .feature-icon {
     width: 60px;
     height: 60px;
-    background-color: #fff3cd;
+    background-color: #ffebee;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -252,6 +253,10 @@ html {
 /* ==========================================
    About Section
    ========================================== */
+
+.about-section.bg-light {
+    background-color: var(--light-color) !important;
+}
 
 .about-section h2 {
     color: var(--text-dark);
@@ -365,7 +370,7 @@ html {
    ========================================== */
 
 .cta-section {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #bb2d3b 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, #8e0000 100%);
     text-align: center;
 }
 
@@ -549,5 +554,5 @@ footer hr {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #bb2d3b;
+    background: #8e0000;
 }

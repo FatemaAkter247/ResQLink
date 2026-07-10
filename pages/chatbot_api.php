@@ -116,7 +116,13 @@ function callGemini(string $message, array $context): array
         'generationConfig' => [
             'temperature' => AI_TEMPERATURE,
             'maxOutputTokens' => AI_MAX_OUTPUT_TOKENS,
-            'responseMimeType' => 'application/json'
+            'responseMimeType' => 'application/json',
+            // gemini-flash-latest is a "thinking" model; disable thinking so the
+            // token budget is spent on the answer, not internal reasoning
+            // (otherwise the JSON reply gets truncated -> MAX_TOKENS).
+            'thinkingConfig' => [
+                'thinkingBudget' => 0
+            ]
         ]
     ];
 
@@ -172,7 +178,8 @@ function getSystemPrompt(): string
         . "Never claim you contacted police, hospital, fire service, or rescue team unless the JSON field should_create_request is true and the system later confirms request creation. "
         . "Always tell users to call 999 first for immediate life danger. "
         . "Use the database context when answering about alerts, shelters, or resources. "
-        . "Return JSON only. No markdown. No extra text. "
+        . "Format the reply value as short, numbered steps. Begin each step with its number and a period (1., 2., 3., ...), put every step on its own line separated by a newline, keep each step to one short clear sentence, and put the most urgent action first. "
+        . "Return JSON only. No markdown symbols like * or #. No extra text. "
         . "JSON format: {\"reply\":\"string\",\"intent\":\"advice|alert|shelter|resource|rescue_request|medical_request|other\",\"disaster_type\":\"flood|cyclone|earthquake|fire|medical|general\",\"priority\":\"low|medium|high|critical\",\"request_type\":\"medical|rescue|food|transport|other\",\"location\":\"exact location if user gave one, otherwise empty string\",\"should_create_request\":true_or_false}";
 }
 
@@ -303,39 +310,67 @@ function logChat(mysqli $conn, int $userId, string $message, array $result, ?int
 
 function httpJson(string $url, array $body, array $headers): array
 {
-    $ch = curl_init($url);
     $headers[] = 'Content-Type: application/json';
+    $payload = json_encode($body, JSON_UNESCAPED_UNICODE);
 
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE),
-        CURLOPT_TIMEOUT => 30
-    ]);
+    // Transient errors (overloaded / rate-limited / gateway) are retried with
+    // a short backoff so brief demand spikes recover silently.
+    $transientStatuses = [429, 500, 502, 503, 504];
+    $maxAttempts = 3;
+    $lastError = 'AI request failed.';
 
-    $raw = curl_exec($ch);
-    $error = curl_error($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 30
+        ]);
 
-    curl_close($ch);
+        $raw = curl_exec($ch);
+        $error = curl_error($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-    if ($raw === false || $error) {
-        throw new RuntimeException('AI request failed: ' . $error);
+        // Transport-level failure (timeout, DNS, reset) — retry then give up.
+        if ($raw === false || $error) {
+            $lastError = 'AI request failed: ' . $error;
+            if ($attempt < $maxAttempts) {
+                usleep($attempt * 600 * 1000); // 0.6s, then 1.2s
+                continue;
+            }
+            throw new RuntimeException($lastError);
+        }
+
+        $data = json_decode($raw, true);
+
+        // Retriable server-side error (e.g. 503 model overloaded).
+        if (in_array($status, $transientStatuses, true)) {
+            $lastError = (is_array($data) && isset($data['error']['message']))
+                ? $data['error']['message']
+                : 'AI service is busy.';
+            if ($attempt < $maxAttempts) {
+                usleep($attempt * 600 * 1000); // 0.6s, then 1.2s
+                continue;
+            }
+            throw new RuntimeException($lastError);
+        }
+
+        if (!is_array($data)) {
+            throw new RuntimeException('AI returned invalid JSON response.');
+        }
+
+        if ($status < 200 || $status >= 300) {
+            $msg = $data['error']['message'] ?? 'AI API error.';
+            throw new RuntimeException($msg);
+        }
+
+        return $data;
     }
 
-    $data = json_decode($raw, true);
-
-    if (!is_array($data)) {
-        throw new RuntimeException('AI returned invalid JSON response.');
-    }
-
-    if ($status < 200 || $status >= 300) {
-        $msg = $data['error']['message'] ?? 'AI API error.';
-        throw new RuntimeException($msg);
-    }
-
-    return $data;
+    throw new RuntimeException($lastError);
 }
 
 function parseAiJson(string $text, string $originalMessage): array

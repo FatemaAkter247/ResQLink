@@ -82,7 +82,7 @@ Emergency Details:
 function callGeminiApi($prompt) {
     $endpoint = GEMINI_API_ENDPOINT;
     $apiKey = GEMINI_API_KEY;
-    
+
     $data = [
         'contents' => [
             [
@@ -90,35 +90,59 @@ function callGeminiApi($prompt) {
                     ['text' => $prompt]
                 ]
             ]
+        ],
+        // gemini-flash-latest is a "thinking" model; disable thinking so the
+        // full JSON alert (bangla + english) is returned without truncation.
+        'generationConfig' => [
+            'thinkingConfig' => [
+                'thinkingBudget' => 0
+            ]
         ]
     ];
-    
-    $ch = curl_init($endpoint . '?key=' . $apiKey);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-    
+    $payload = json_encode($data);
+
+    // Retry transient errors (overloaded / rate-limited / gateway) with backoff.
+    $transientStatuses = [429, 500, 502, 503, 504];
+    $maxAttempts = 3;
+    $response = false;
+    $httpCode = 0;
+    $error = '';
+
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        $ch = curl_init($endpoint . '?key=' . $apiKey);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        $isTransient = ($response === false || $error || in_array($httpCode, $transientStatuses, true));
+        if ($isTransient && $attempt < $maxAttempts) {
+            usleep($attempt * 600 * 1000); // 0.6s, then 1.2s
+            continue;
+        }
+        break;
+    }
+
     if ($error) {
         error_log("Gemini API curl error: " . $error);
         return ['error' => 'Failed to connect to AI service.'];
     }
-    
+
     if ($httpCode !== 200) {
         $errorBody = json_decode($response, true);
         $errorMessage = $errorBody['error']['message'] ?? ('AI service returned HTTP ' . $httpCode);
         error_log("Gemini API returned HTTP code: " . $httpCode . " | Response: " . $response);
         return ['error' => 'AI service error: ' . $errorMessage];
     }
-    
+
     return ['response' => $response];
 }
 
