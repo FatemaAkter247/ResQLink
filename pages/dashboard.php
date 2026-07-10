@@ -1005,7 +1005,7 @@ a {
                 <i class="fa-solid fa-person-walking-arrow-right"></i> Evacuation Status
             </a>
 
-            <a href="chatbot.php" class="nav-link">
+            <a href="request_help.php" class="nav-link">
                 <i class="fa-solid fa-hand-holding-heart"></i> Request Help
             </a>
         <?php endif; ?>
@@ -1574,7 +1574,7 @@ a {
                     <span>Update Status</span>
                 </a>
 
-                <a href="chatbot.php" class="action-card">
+                <a href="request_help.php" class="action-card">
                     <div class="ac-icon" style="background:#e65100;">
                         <i class="fa-solid fa-hand-holding-heart"></i>
                     </div>

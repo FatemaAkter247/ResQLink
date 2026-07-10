@@ -605,7 +605,7 @@ if (isset($conn) && $conn) {
             <i class="fa-solid fa-person-walking-arrow-right"></i> Evacuation Status
         </a>
 
-        <a href="chatbot.php" class="nav-link active">
+        <a href="request_help.php" class="nav-link">
             <i class="fa-solid fa-hand-holding-heart"></i> Request Help
         </a>
     </nav>

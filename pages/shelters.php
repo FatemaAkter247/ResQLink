@@ -576,7 +576,7 @@ $result = $conn->query("SELECT * FROM shelters ORDER BY created_at DESC");
             <i class="fa-solid fa-person-walking-arrow-right"></i> Evacuation Status
         </a>
 
-        <a href="chatbot.php" class="nav-link">
+        <a href="request_help.php" class="nav-link">
             <i class="fa-solid fa-hand-holding-heart"></i> Request Help
         </a>
     </nav>

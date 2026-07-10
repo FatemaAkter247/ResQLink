@@ -9,129 +9,287 @@ session_start();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - ResQLink</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
 
     <style>
-        .login-container {
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --accent: #c62828;
+            --accent-dark: #8e0000;
+            --accent-light: #ffebee;
+            --bg: #f0f2f5;
+            --white: #ffffff;
+            --text: #1a1a2e;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --shadow: 0 4px 16px rgba(0, 0, 0, .10);
+            --radius: 14px;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-            padding: 40px 0;
-            background: linear-gradient(135deg, #dc3545 0%, #bb2d3b 100%);
+            display: flex;
+            flex-direction: column;
         }
 
-        .login-card {
-            width: 100%;
-            max-width: 500px;
-            padding: 2rem;
-            background: white;
+        a { color: inherit; }
+
+        /* ---------- Top bar ---------- */
+        .topbar {
+            height: 66px;
+            background: var(--white);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 28px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .brand-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: var(--accent);
+            color: #fff;
+            display: grid;
+            place-items: center;
+        }
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .brand-name span { color: var(--accent); }
+
+        .topbar-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .top-link {
+            padding: 9px 18px;
             border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            margin: 0 auto;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            color: var(--muted);
         }
 
-        .login-card h2 {
-            color: #dc3545;
+        .top-link:hover {
+            background: var(--accent-light);
+            color: var(--accent);
+        }
+
+        .top-link.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        /* ---------- Auth wrap ---------- */
+        .auth-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .auth-card {
+            width: 100%;
+            max-width: 440px;
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 36px 34px;
+        }
+
+        .auth-head {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 26px;
+        }
+
+        .auth-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: var(--accent-light);
+            color: var(--accent);
+            display: grid;
+            place-items: center;
+            font-size: 22px;
+            margin: 0 auto 14px;
+        }
+
+        .auth-head h1 {
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .auth-head p {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+
+        .flash {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 18px;
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+
+        .form-label {
+            font-size: 13px;
             font-weight: 700;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .form-control {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 11px 14px;
+            font-size: 14px;
+            font-family: inherit;
         }
 
         .form-control:focus {
-            border-color: #dc3545;
-            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.15);
         }
 
-        .btn-login {
-            background-color: #dc3545;
-            border-color: #dc3545;
+        .mb-3 { margin-bottom: 18px; }
+
+        .btn-primary {
             width: 100%;
-            font-weight: 600;
-            padding: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 22px;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all .2s ease;
         }
 
-        .btn-login:hover {
-            background-color: #bb2d3b;
-            border-color: #bb2d3b;
+        .btn-primary:hover {
+            background: var(--accent-dark);
+            transform: translateY(-2px);
         }
 
-        .login-footer {
+        .auth-footer {
             text-align: center;
-            margin-top: 1.5rem;
+            margin-top: 20px;
+            font-size: 13px;
+            color: var(--muted);
         }
 
-        .login-footer a {
-            color: #dc3545;
+        .auth-footer a {
+            color: var(--accent);
+            font-weight: 700;
             text-decoration: none;
-            font-weight: 500;
         }
 
-        .login-footer a:hover {
-            text-decoration: underline;
+        .auth-footer a:hover { text-decoration: underline; }
+
+        @media (max-width: 500px) {
+            .topbar { padding: 0 16px; }
+            .top-link span { display: none; }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="../index.php">
-                <span class="badge bg-danger">ResQLink</span>
-            </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="../index.php">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active btn btn-danger text-white ms-2" href="login.php">Login</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="register.php">Register</a>
-                    </li>
-                </ul>
-            </div>
+<header class="topbar">
+    <a href="../index.php" class="brand">
+        <div class="brand-icon">
+            <i class="fa-solid fa-shield-halved"></i>
         </div>
+        <span class="brand-name">ResQ<span>Link</span></span>
+    </a>
+
+    <nav class="topbar-links">
+        <a href="../index.php" class="top-link">Home</a>
+        <a href="login.php" class="top-link active">Login</a>
+        <a href="register.php" class="top-link">Register</a>
     </nav>
+</header>
 
-    <div class="login-container">
-        <div class="container">
-            <div class="login-card">
-                <h2>Welcome Back</h2>
-
-                <?php if (isset($_SESSION['error'])): ?>
-                    <div class="alert alert-danger">
-                        <?php
-                        echo htmlspecialchars($_SESSION['error']);
-                        unset($_SESSION['error']);
-                        ?>
-                    </div>
-                <?php endif; ?>
-
-                <form action="login_action.php" method="POST">
-                    <div class="mb-3">
-                        <label for="login_input" class="form-label">Email or Phone</label>
-                        <input type="text" class="form-control" id="login_input" name="login_input" placeholder="Enter your email or phone" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
-                    </div>
-
-                    <button type="submit" class="btn btn-login btn-danger">Login</button>
-                </form>
-
-                <div class="login-footer">
-                    <p>Don't have an account? <a href="register.php">Register here</a></p>
-                </div>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <div class="auth-head">
+            <div class="auth-icon">
+                <i class="fa-solid fa-right-to-bracket"></i>
             </div>
+            <h1>Welcome Back</h1>
+            <p>Log in to your ResQLink account</p>
+        </div>
+
+        <?php if (isset($_SESSION['error'])): ?>
+            <div class="flash">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <?php
+                echo htmlspecialchars($_SESSION['error']);
+                unset($_SESSION['error']);
+                ?>
+            </div>
+        <?php endif; ?>
+
+        <form action="login_action.php" method="POST">
+            <div class="mb-3">
+                <label for="login_input" class="form-label">Email or Phone</label>
+                <input type="text" class="form-control" id="login_input" name="login_input" placeholder="Enter your email or phone" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
+            </div>
+
+            <button type="submit" class="btn-primary">
+                <i class="fa-solid fa-right-to-bracket"></i> Login
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="register.php">Register here</a></p>
         </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
